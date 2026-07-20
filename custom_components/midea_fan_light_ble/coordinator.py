@@ -113,8 +113,8 @@ class MideaFanLightCoordinator(PassiveBluetoothDataUpdateCoordinator):
         change: BluetoothChange,
     ) -> None:
         """Handle an advertisement delivered by the Bluetooth manager."""
-        if state_from_service_info(service_info) is not None:
-            super()._async_handle_bluetooth_event(service_info, change)
+        if state := state_from_service_info(service_info):
+            self._publish_state(state)
 
     @callback
     def _async_handle_unavailable(

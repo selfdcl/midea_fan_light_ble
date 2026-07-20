@@ -43,6 +43,20 @@
     "number": {
       "timer": {
         "name": "Timer"
+      },
+      "brightness": {
+        "name": "Brightness"
+      },
+      "color_temperature": {
+        "name": "Color temperature"
+      }
+    },
+    "select": {
+      "fan_speed": {
+        "name": "Fan speed"
+      },
+      "fan_direction": {
+        "name": "Fan direction"
       }
     }
   }
