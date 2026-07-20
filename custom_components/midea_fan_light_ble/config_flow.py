@@ -11,7 +11,8 @@ from homeassistant.components.bluetooth import BluetoothServiceInfoBleak
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 from homeassistant.const import CONF_ADDRESS
 
-from .const import DOMAIN
+from .bridge import async_available_bridge_actions
+from .const import CONF_BRIDGE_ACTION, DOMAIN
 from .coordinator import state_from_service_info
 from .protocol import normalize_address
 
@@ -25,12 +26,30 @@ def _device_title(address: str) -> str:
 class MideaFanLightConfigFlow(ConfigFlow, domain=DOMAIN):
     """Discover and add Midea BLE fan lights."""
 
-    VERSION = 1
+    VERSION = 2
 
     def __init__(self) -> None:
         """Initialize the flow."""
         self._discovery_info: BluetoothServiceInfoBleak | None = None
         self._discovered_devices: dict[str, BluetoothServiceInfoBleak] = {}
+        self._bridge_actions: dict[str, str] = {}
+
+    def _refresh_bridges(self) -> bool:
+        """Refresh compatible ESPHome broadcast bridge actions."""
+        self._bridge_actions = async_available_bridge_actions(self.hass)
+        return bool(self._bridge_actions)
+
+    def _bridge_schema(self) -> dict[vol.Marker, Any]:
+        """Return a bridge selector only when multiple bridges are present."""
+        if len(self._bridge_actions) <= 1:
+            return {}
+        return {vol.Required(CONF_BRIDGE_ACTION): vol.In(self._bridge_actions)}
+
+    def _selected_bridge(self, user_input: dict[str, Any]) -> str:
+        """Return the selected bridge, or the only available bridge."""
+        if bridge_action := user_input.get(CONF_BRIDGE_ACTION):
+            return bridge_action
+        return next(iter(self._bridge_actions))
 
     async def async_step_bluetooth(
         self, discovery_info: BluetoothServiceInfoBleak
@@ -38,6 +57,8 @@ class MideaFanLightConfigFlow(ConfigFlow, domain=DOMAIN):
         """Handle automatic Bluetooth discovery."""
         if state_from_service_info(discovery_info) is None:
             return self.async_abort(reason="not_supported")
+        if not self._refresh_bridges():
+            return self.async_abort(reason="bridge_not_found")
 
         address = normalize_address(discovery_info.address)
         await self.async_set_unique_id(address)
@@ -56,11 +77,16 @@ class MideaFanLightConfigFlow(ConfigFlow, domain=DOMAIN):
         address = normalize_address(self._discovery_info.address)
         if user_input is not None:
             return self.async_create_entry(
-                title=_device_title(address), data={CONF_ADDRESS: address}
+                title=_device_title(address),
+                data={
+                    CONF_ADDRESS: address,
+                    CONF_BRIDGE_ACTION: self._selected_bridge(user_input),
+                },
             )
 
         return self.async_show_form(
             step_id="confirm",
+            data_schema=vol.Schema(self._bridge_schema()),
             description_placeholders={
                 "name": _device_title(address),
                 "address": address,
@@ -70,7 +96,10 @@ class MideaFanLightConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Let the user select any currently discovered compatible device."""
+        """Let the user select a discovered device and broadcast bridge."""
+        if not self._refresh_bridges():
+            return self.async_abort(reason="bridge_not_found")
+
         if user_input is not None:
             address = normalize_address(user_input[CONF_ADDRESS])
             discovery_info = self._discovered_devices[address]
@@ -78,13 +107,16 @@ class MideaFanLightConfigFlow(ConfigFlow, domain=DOMAIN):
             self._abort_if_unique_id_configured()
             return self.async_create_entry(
                 title=_device_title(address),
-                data={CONF_ADDRESS: normalize_address(discovery_info.address)},
+                data={
+                    CONF_ADDRESS: normalize_address(discovery_info.address),
+                    CONF_BRIDGE_ACTION: self._selected_bridge(user_input),
+                },
             )
 
         current_ids = self._async_current_ids(include_ignore=False)
         self._discovered_devices.clear()
         for discovery_info in bluetooth.async_discovered_service_info(
-            self.hass, connectable=True
+            self.hass, connectable=False
         ):
             address = normalize_address(discovery_info.address)
             if (
@@ -97,11 +129,15 @@ class MideaFanLightConfigFlow(ConfigFlow, domain=DOMAIN):
         if not self._discovered_devices:
             return self.async_abort(reason="no_devices_found")
 
-        choices = {
+        device_choices = {
             address: f"{_device_title(address)} ({address})"
             for address in self._discovered_devices
         }
+        schema: dict[vol.Marker, Any] = {
+            vol.Required(CONF_ADDRESS): vol.In(device_choices)
+        }
+        schema.update(self._bridge_schema())
         return self.async_show_form(
             step_id="user",
-            data_schema=vol.Schema({vol.Required(CONF_ADDRESS): vol.In(choices)}),
+            data_schema=vol.Schema(schema),
         )

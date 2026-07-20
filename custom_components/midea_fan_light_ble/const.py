@@ -5,6 +5,8 @@ from __future__ import annotations
 from homeassistant.const import Platform
 
 DOMAIN = "midea_fan_light_ble"
+CONF_BRIDGE_ACTION = "bridge_action"
+BRIDGE_ACTION_SUFFIX = "_midea_ble_broadcast"
 
 MANUFACTURER_ID = 0x06A8
 ADVERTISEMENT_HEADER = bytes((0x81, 0x63, 0x01))
@@ -21,6 +23,28 @@ MODE_REVERSE = 0x20
 COMMAND_LIGHT = 0x06
 COMMAND_FAN = 0x09
 COMMAND_NIGHT_LIGHT = 0x5F
+COMMAND_REVERSE = 0x1C
+COMMAND_BRIGHTNESS = 0x51
+COMMAND_COLOR_TEMPERATURE = 0x55
+
+COMMAND_SPEED_BY_LEVEL = {
+    1: 0x19,
+    2: 0x1A,
+    3: 0x81,
+    4: 0x88,
+    5: 0x85,
+    6: 0x86,
+}
+
+COMMAND_TIMER_BY_HOURS = {
+    0: 0x50,
+    1: 0x52,
+    2: 0x53,
+    3: 0x54,
+    4: 0x56,
+    5: 0x57,
+    6: 0x58,
+}
 
 COMMAND_BY_MODE_BIT = {
     MODE_LIGHT: COMMAND_LIGHT,
@@ -28,7 +52,11 @@ COMMAND_BY_MODE_BIT = {
     MODE_NIGHT_LIGHT: COMMAND_NIGHT_LIGHT,
 }
 
-PLATFORMS: list[Platform] = [Platform.LIGHT, Platform.FAN, Platform.SWITCH]
+PLATFORMS: list[Platform] = [
+    Platform.LIGHT,
+    Platform.FAN,
+    Platform.SWITCH,
+    Platform.NUMBER,
+]
 
-CONTROL_TIMEOUT = 4.0
-NOTIFY_SETTLE_TIME = 0.25
+CONTROL_TIMEOUT = 15.0

@@ -3,19 +3,24 @@
     "step": {
       "user": {
         "title": "Add a Midea BLE fan light",
-        "description": "Select a compatible fan light currently visible to a connectable Bluetooth adapter or ESPHome proxy.",
+        "description": "Select a compatible fan light currently visible to an ESPHome broadcast bridge.",
         "data": {
-          "address": "Device"
+          "address": "Device",
+          "bridge_action": "ESPHome broadcast bridge"
         }
       },
       "confirm": {
         "title": "Add {name}",
-        "description": "Add {name} ({address}) to Home Assistant?"
+        "description": "Add {name} ({address}) to Home Assistant?",
+        "data": {
+          "bridge_action": "ESPHome broadcast bridge"
+        }
       }
     },
     "abort": {
       "already_configured": "This device is already configured.",
       "no_devices_found": "No compatible Midea BLE fan lights were found.",
+      "bridge_not_found": "No compatible ESPHome Midea BLE broadcast bridge action is available.",
       "not_supported": "The discovered advertisement is not a supported Midea fan light."
     }
   },
@@ -33,6 +38,11 @@
     "switch": {
       "night_light": {
         "name": "Night light"
+      }
+    },
+    "number": {
+      "timer": {
+        "name": "Timer"
       }
     }
   }

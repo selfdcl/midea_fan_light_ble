@@ -6,8 +6,10 @@ from homeassistant.components import bluetooth
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_ADDRESS
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryNotReady
 
-from .const import PLATFORMS
+from .bridge import async_available_bridge_actions
+from .const import CONF_BRIDGE_ACTION, PLATFORMS
 from .coordinator import MideaFanLightCoordinator
 
 MideaFanLightConfigEntry = ConfigEntry[MideaFanLightCoordinator]
@@ -18,7 +20,20 @@ async def async_setup_entry(
 ) -> bool:
     """Set up a configured fan light."""
     address = entry.data[CONF_ADDRESS]
-    coordinator = MideaFanLightCoordinator(hass, address, entry.title)
+    available_bridges = async_available_bridge_actions(hass)
+    bridge_action = entry.data.get(CONF_BRIDGE_ACTION)
+    if bridge_action not in available_bridges:
+        if len(available_bridges) != 1:
+            raise ConfigEntryNotReady(
+                "Exactly one ESPHome Midea BLE broadcast bridge must be available"
+            )
+        bridge_action = next(iter(available_bridges))
+        hass.config_entries.async_update_entry(
+            entry,
+            data={**entry.data, CONF_BRIDGE_ACTION: bridge_action},
+        )
+
+    coordinator = MideaFanLightCoordinator(hass, address, entry.title, bridge_action)
     entry.runtime_data = coordinator
 
     coordinator.process_initial_service_info(

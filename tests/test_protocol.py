@@ -14,6 +14,8 @@ from protocol import (  # noqa: E402
     COMMAND_LIGHT,
     COMMAND_NIGHT_LIGHT,
     MideaProtocolError,
+    build_broadcast_frame,
+    build_broadcast_release_frame,
     build_control_frame,
     embedded_address,
     parse_advertisement,
@@ -82,6 +84,48 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual(
             build_control_frame(COMMAND_NIGHT_LIGHT, 0x0E),
             from_hex("10 EB A3 47 44 6E D1 F3 51 D3 73 95 F3 60 82 E0 22 E1"),
+        )
+
+    def test_build_broadcast_light_toggle(self) -> None:
+        self.assertEqual(
+            build_broadcast_frame("80:22:00:60:73:D1", 0x06, 4),
+            from_hex(
+                "11 4D 19 14 D1 73 60 00 22 80 01 50 D3 75 95 F3 60 82 "
+                "E0 22 80 A2 46 44 31 D9"
+            ),
+        )
+
+    def test_build_broadcast_fan_toggle(self) -> None:
+        self.assertEqual(
+            build_broadcast_frame("80:22:00:60:73:D1", 0x09, 0),
+            from_hex(
+                "11 4D 19 10 D1 73 60 00 22 80 01 45 31 D8 F3 51 D3 73 "
+                "95 F3 60 82 E0 22 80 A9"
+            ),
+        )
+
+    def test_build_broadcast_brightness(self) -> None:
+        self.assertEqual(
+            build_broadcast_frame(
+                "80:22:00:60:73:D1",
+                0x51,
+                2,
+                value=0xE8,
+                light_command=True,
+            ),
+            from_hex(
+                "11 4D 19 12 D1 73 60 00 22 80 01 D0 F2 00 3B 73 95 F3 "
+                "60 82 E0 22 80 A2 46 78"
+            ),
+        )
+
+    def test_build_broadcast_release(self) -> None:
+        self.assertEqual(
+            build_broadcast_release_frame("80:22:00:60:73:D1", 8),
+            from_hex(
+                "11 4D 19 18 D1 73 60 00 22 80 01 F2 60 82 E0 22 80 A2 "
+                "46 44 31 D1 F3 51 D3 71"
+            ),
         )
 
 

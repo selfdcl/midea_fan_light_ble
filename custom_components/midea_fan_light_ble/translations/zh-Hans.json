@@ -3,19 +3,24 @@
     "step": {
       "user": {
         "title": "添加美的蓝牙风扇灯",
-        "description": "选择当前可由本地蓝牙适配器或 ESPHome 蓝牙代理连接的兼容设备。",
+        "description": "选择当前可由 ESPHome 广播控制桥看到的兼容设备。",
         "data": {
-          "address": "设备"
+          "address": "设备",
+          "bridge_action": "ESPHome 广播控制桥"
         }
       },
       "confirm": {
         "title": "添加 {name}",
-        "description": "是否将 {name}（{address}）添加到 Home Assistant？"
+        "description": "是否将 {name}（{address}）添加到 Home Assistant？",
+        "data": {
+          "bridge_action": "ESPHome 广播控制桥"
+        }
       }
     },
     "abort": {
       "already_configured": "该设备已经添加。",
       "no_devices_found": "没有发现兼容的美的蓝牙风扇灯。",
+      "bridge_not_found": "没有找到兼容的 ESPHome 美的 BLE 广播控制桥动作。",
       "not_supported": "发现的广播不是当前支持的美的风扇灯协议。"
     }
   },
@@ -33,6 +38,11 @@
     "switch": {
       "night_light": {
         "name": "夜灯"
+      }
+    },
+    "number": {
+      "timer": {
+        "name": "定时"
       }
     }
   }

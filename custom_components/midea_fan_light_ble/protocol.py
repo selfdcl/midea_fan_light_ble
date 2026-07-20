@@ -16,6 +16,8 @@ COMMAND_LIGHT = 0x06
 COMMAND_FAN = 0x09
 COMMAND_NIGHT_LIGHT = 0x5F
 
+_CONTROL_COMPANY_ID = bytes((0x11, 0x4D))
+
 _XOR_BASE = bytes(
     (
         0xD1,
@@ -177,3 +179,43 @@ def build_control_frame(command: int, sequence: int) -> bytes:
         for index in range(16)
     )
     return bytes((0x10, (sequence << 4) | 0x0B)) + encrypted
+
+
+def build_broadcast_frame(
+    address: str,
+    command: int,
+    sequence: int,
+    *,
+    value: int = 0,
+    light_command: bool = False,
+) -> bytes:
+    """Build a connectionless 0x4D11 command advertisement."""
+    if not 0 <= sequence <= 0x0F:
+        raise MideaProtocolError(f"Sequence must be 0..15, got {sequence}")
+    if not 0 <= command <= 0xFF or not 0 <= value <= 0xFF:
+        raise MideaProtocolError("Command and value must be bytes")
+
+    address_bytes = bytes.fromhex(normalize_address(address).replace(":", ""))
+    frame = bytearray(
+        _CONTROL_COMPANY_ID
+        + bytes((0x19, 0x10 | sequence))
+        + bytes(reversed(address_bytes))
+        + bytes((0x01,))
+        + bytes(_XOR_BASE[(sequence + 14 + index) & 0x0F] for index in range(15))
+    )
+    tail_offset = 11
+    frame[tail_offset] ^= 0x01
+    if light_command:
+        frame[tail_offset + 1] ^= 0x01
+    frame[tail_offset + 2] ^= command
+    if light_command:
+        frame[tail_offset + 3] ^= value
+        frame[tail_offset + 14] ^= (command + value + 3) & 0xFF
+    else:
+        frame[tail_offset + 14] ^= (command + 2) & 0xFF
+    return bytes(frame)
+
+
+def build_broadcast_release_frame(address: str, sequence: int) -> bytes:
+    """Build the release packet sent after a 0x4D11 command."""
+    return build_broadcast_frame(address, 0, sequence)
