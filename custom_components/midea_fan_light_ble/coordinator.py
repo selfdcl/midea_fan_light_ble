@@ -62,7 +62,7 @@ class MideaFanLightCoordinator(PassiveBluetoothDataUpdateCoordinator):
     def __init__(self, hass: HomeAssistant, address: str, name: str) -> None:
         """Initialize the coordinator."""
         self.address = normalize_address(address)
-        self.name = name
+        self._device_name = name
         self._connect_lock = asyncio.Lock()
         self._next_sequence = 0
         self.data: MideaFanLightState | None = None
@@ -148,7 +148,7 @@ class MideaFanLightCoordinator(PassiveBluetoothDataUpdateCoordinator):
             client = await establish_connection(
                 BleakClientWithServiceCache,
                 ble_device,
-                self.name,
+                self._device_name,
                 max_attempts=3,
             )
             expected_state_received = asyncio.Event()
