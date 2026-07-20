@@ -1,0 +1,39 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "添加美的蓝牙风扇灯",
+        "description": "选择当前可由本地蓝牙适配器或 ESPHome 蓝牙代理连接的兼容设备。",
+        "data": {
+          "address": "设备"
+        }
+      },
+      "confirm": {
+        "title": "添加 {name}",
+        "description": "是否将 {name}（{address}）添加到 Home Assistant？"
+      }
+    },
+    "abort": {
+      "already_configured": "该设备已经添加。",
+      "no_devices_found": "没有发现兼容的美的蓝牙风扇灯。",
+      "not_supported": "发现的广播不是当前支持的美的风扇灯协议。"
+    }
+  },
+  "entity": {
+    "light": {
+      "main_light": {
+        "name": "主灯"
+      }
+    },
+    "fan": {
+      "fan": {
+        "name": "风扇"
+      }
+    },
+    "switch": {
+      "night_light": {
+        "name": "夜灯"
+      }
+    }
+  }
+}

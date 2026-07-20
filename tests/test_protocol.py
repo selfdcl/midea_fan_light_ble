@@ -1,0 +1,89 @@
+"""Tests for the Midea BLE fan light protocol codec."""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+import unittest
+
+COMPONENT_DIR = Path(__file__).parents[1] / "custom_components" / "midea_fan_light_ble"
+sys.path.insert(0, str(COMPONENT_DIR))
+
+from protocol import (  # noqa: E402
+    COMMAND_FAN,
+    COMMAND_LIGHT,
+    COMMAND_NIGHT_LIGHT,
+    MideaProtocolError,
+    build_control_frame,
+    embedded_address,
+    parse_advertisement,
+    parse_bbb1,
+)
+
+
+def from_hex(value: str) -> bytes:
+    """Convert a spaced hexadecimal fixture to bytes."""
+    return bytes.fromhex(value)
+
+
+class ProtocolTests(unittest.TestCase):
+    """Validate packets captured from the real fan light and original app."""
+
+    def test_parse_all_off_advertisement(self) -> None:
+        payload = from_hex(
+            "81 63 01 D1 73 60 00 22 80 08 00 00 01 00 66 3C 00 00 00 01"
+        )
+        state = parse_advertisement(payload, address="80:22:00:60:73:D1", rssi=-66)
+
+        self.assertEqual(embedded_address(payload), "80:22:00:60:73:D1")
+        self.assertFalse(state.light_on)
+        self.assertFalse(state.fan_on)
+        self.assertFalse(state.night_light_on)
+        self.assertEqual(state.brightness_percent, 40)
+        self.assertEqual(state.color_temperature_kelvin, 3594)
+        self.assertEqual(state.rssi, -66)
+
+    def test_reject_mismatched_embedded_address(self) -> None:
+        payload = from_hex(
+            "81 63 01 D1 73 60 00 22 80 08 00 00 01 00 66 3C 00 00 00 01"
+        )
+        with self.assertRaises(MideaProtocolError):
+            parse_advertisement(payload, address="AA:BB:CC:DD:EE:FF")
+
+    def test_parse_bbb1_fan_on(self) -> None:
+        state = parse_bbb1(from_hex("0C CB 2A 80 A0 47 44 57 ED F3 51 D3 72"))
+
+        self.assertEqual(state.sequence, 0x0C)
+        self.assertFalse(state.light_on)
+        self.assertTrue(state.fan_on)
+        self.assertEqual(state.speed, 1)
+
+    def test_parse_bbb1_night_light_on(self) -> None:
+        state = parse_bbb1(from_hex("0C EB AA 46 41 30 D1 F0 51 D3 73 95 F2"))
+
+        self.assertTrue(state.light_on)
+        self.assertTrue(state.night_light_on)
+        self.assertFalse(state.fan_on)
+        self.assertEqual(state.brightness_percent, 1)
+
+    def test_build_light_frame(self) -> None:
+        self.assertEqual(
+            build_control_frame(COMMAND_LIGHT, 0),
+            from_hex("10 0B 45 30 D1 F5 51 D3 73 95 F3 60 82 E0 22 80 A2 4E"),
+        )
+
+    def test_build_fan_frame(self) -> None:
+        self.assertEqual(
+            build_control_frame(COMMAND_FAN, 0),
+            from_hex("10 0B 45 30 D1 FA 51 D3 73 95 F3 60 82 E0 22 80 A2 4D"),
+        )
+
+    def test_build_night_light_frame(self) -> None:
+        self.assertEqual(
+            build_control_frame(COMMAND_NIGHT_LIGHT, 0x0E),
+            from_hex("10 EB A3 47 44 6E D1 F3 51 D3 73 95 F3 60 82 E0 22 E1"),
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()
