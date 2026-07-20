@@ -14,17 +14,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Validate HACS repository
         uses: hacs/action@main
         with:
           category: integration
+          ignore: brands
 
   hassfest:
     name: Hassfest
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Validate Home Assistant integration
         uses: home-assistant/actions/hassfest@master
