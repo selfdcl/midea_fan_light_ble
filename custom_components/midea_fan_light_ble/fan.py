@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from homeassistant.components.fan import FanEntity, FanEntityFeature
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
@@ -35,10 +37,15 @@ class MideaFan(MideaFanLightEntity, FanEntity):
         """Return whether the fan is running."""
         return self.coordinator.data.fan_on if self.coordinator.data else None
 
-    async def async_turn_on(self, **kwargs) -> None:
+    async def async_turn_on(
+        self,
+        percentage: int | None = None,
+        preset_mode: str | None = None,
+        **kwargs: Any,
+    ) -> None:
         """Turn the fan on."""
         await self.coordinator.async_set_mode_bit(MODE_FAN, True)
 
-    async def async_turn_off(self, **kwargs) -> None:
+    async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the fan off."""
         await self.coordinator.async_set_mode_bit(MODE_FAN, False)
