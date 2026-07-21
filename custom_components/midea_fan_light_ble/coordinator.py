@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Callable
 import logging
+import random
 
 from homeassistant.components import bluetooth
 from homeassistant.components.bluetooth import (
@@ -25,9 +26,11 @@ from .const import (
     COMMAND_SPEED_BY_LEVEL,
     COMMAND_TIMER_BY_HOURS,
     CONTROL_TIMEOUT,
+    DOMAIN,
     MANUFACTURER_ID,
     MODE_FAN,
     MODE_LIGHT,
+    MODE_NIGHT_LIGHT,
 )
 from .protocol import (
     MideaFanLightState,
@@ -74,6 +77,8 @@ class MideaFanLightCoordinator(PassiveBluetoothDataUpdateCoordinator):
         self._bridge_action = bridge_action
         self._control_lock = asyncio.Lock()
         self._control_state_event: asyncio.Event | None = None
+        self._natural_wind_enabled = False
+        self._natural_wind_task: asyncio.Task[None] | None = None
         self.data: MideaFanLightState | None = None
         super().__init__(
             hass=hass,
@@ -96,6 +101,8 @@ class MideaFanLightCoordinator(PassiveBluetoothDataUpdateCoordinator):
         """Publish state and wake a pending broadcast command waiter."""
         self.data = state
         self._available = True
+        if self._natural_wind_enabled and not state.fan_on:
+            self._stop_natural_wind()
         self.async_update_listeners()
         if self._control_state_event is not None:
             self._control_state_event.set()
@@ -130,6 +137,28 @@ class MideaFanLightCoordinator(PassiveBluetoothDataUpdateCoordinator):
                 "No state advertisement has been received from the device"
             )
         return self.data
+
+    @property
+    def natural_wind_enabled(self) -> bool:
+        """Return whether local natural-wind modulation is running."""
+        return self._natural_wind_enabled
+
+    @callback
+    def _stop_natural_wind(self) -> None:
+        """Stop the natural-wind background task without changing fan power."""
+        was_enabled = self._natural_wind_enabled
+        self._natural_wind_enabled = False
+        task = self._natural_wind_task
+        self._natural_wind_task = None
+        if task is not None and task is not asyncio.current_task():
+            task.cancel()
+        if was_enabled:
+            self.async_update_listeners()
+
+    @callback
+    def async_shutdown(self) -> None:
+        """Cancel integration-owned background work during config-entry unload."""
+        self._stop_natural_wind()
 
     async def _async_broadcast_and_wait(
         self,
@@ -194,6 +223,8 @@ class MideaFanLightCoordinator(PassiveBluetoothDataUpdateCoordinator):
 
     async def async_set_mode_bit(self, mode_bit: int, desired_on: bool) -> None:
         """Set a toggle feature through connectionless BLE advertising."""
+        if mode_bit == MODE_FAN and not desired_on:
+            self._stop_natural_wind()
         async with self._control_lock:
             await self._async_toggle_locked(mode_bit, desired_on)
 
@@ -205,6 +236,8 @@ class MideaFanLightCoordinator(PassiveBluetoothDataUpdateCoordinator):
     ) -> None:
         """Turn on the light and optionally set color temperature/brightness."""
         async with self._control_lock:
+            if self._require_state().night_light_on:
+                await self._async_toggle_locked(MODE_NIGHT_LIGHT, False)
             await self._async_toggle_locked(MODE_LIGHT, True)
             if color_raw is not None and self._require_state().color_raw != color_raw:
                 await self._async_broadcast_and_wait(
@@ -224,19 +257,65 @@ class MideaFanLightCoordinator(PassiveBluetoothDataUpdateCoordinator):
                     light_command=True,
                 )
 
-    async def async_set_speed(self, speed: int) -> None:
-        """Set one of the six fan speeds, starting the fan when required."""
+    async def async_turn_off_light(self) -> None:
+        """Turn off whichever mode the combined light entity is using."""
+        async with self._control_lock:
+            state = self._require_state()
+            mode_bit = MODE_NIGHT_LIGHT if state.night_light_on else MODE_LIGHT
+            await self._async_toggle_locked(mode_bit, False)
+
+    async def _async_set_speed_locked(self, speed: int) -> None:
+        """Set fan speed while the caller owns the control lock."""
         command = COMMAND_SPEED_BY_LEVEL.get(speed)
         if command is None:
             raise HomeAssistantError(f"Unsupported fan speed: {speed}")
+        await self._async_toggle_locked(MODE_FAN, True)
+        if self._require_state().speed == speed:
+            return
+        await self._async_broadcast_and_wait(
+            command,
+            lambda state: state.fan_on and state.speed == speed,
+        )
+
+    async def async_set_speed(self, speed: int) -> None:
+        """Set one of the six fan speeds, starting the fan when required."""
+        self._stop_natural_wind()
+        async with self._control_lock:
+            await self._async_set_speed_locked(speed)
+
+    async def async_set_natural_wind(self, enabled: bool) -> None:
+        """Enable or disable random 1..6 speed changes every minute."""
+        if not enabled:
+            self._stop_natural_wind()
+            return
         async with self._control_lock:
             await self._async_toggle_locked(MODE_FAN, True)
-            if self._require_state().speed == speed:
+            if self._natural_wind_enabled:
                 return
-            await self._async_broadcast_and_wait(
-                command,
-                lambda state: state.fan_on and state.speed == speed,
+            self._natural_wind_enabled = True
+            self._natural_wind_task = self.hass.async_create_task(
+                self._async_natural_wind_loop(),
+                f"{DOMAIN} natural wind {self.address}",
+                eager_start=True,
             )
+            self.async_update_listeners()
+
+    async def _async_natural_wind_loop(self) -> None:
+        """Periodically choose a different fan speed while enabled."""
+        try:
+            while self._natural_wind_enabled:
+                await asyncio.sleep(60)
+                async with self._control_lock:
+                    if not self._natural_wind_enabled:
+                        return
+                    current = self._require_state().speed
+                    choices = [speed for speed in range(1, 7) if speed != current]
+                    await self._async_set_speed_locked(random.choice(choices))
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            _LOGGER.exception("%s: natural-wind loop failed", self.address)
+            self._stop_natural_wind()
 
     async def async_set_direction(self, reverse: bool) -> None:
         """Set fan direction; the device command toggles the current direction."""

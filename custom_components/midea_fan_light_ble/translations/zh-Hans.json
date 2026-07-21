@@ -27,7 +27,7 @@
   "entity": {
     "light": {
       "main_light": {
-        "name": "主灯"
+        "name": "灯"
       }
     },
     "fan": {
@@ -42,21 +42,7 @@
     },
     "number": {
       "timer": {
-        "name": "定时"
-      },
-      "brightness": {
-        "name": "亮度"
-      },
-      "color_temperature": {
-        "name": "色温"
-      }
-    },
-    "select": {
-      "fan_speed": {
-        "name": "风速档位"
-      },
-      "fan_direction": {
-        "name": "风扇方向"
+        "name": "风扇定时"
       }
     }
   }

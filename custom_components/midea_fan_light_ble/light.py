@@ -14,7 +14,6 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import MideaFanLightConfigEntry
-from .const import MODE_LIGHT
 from .entity import MideaFanLightEntity
 
 
@@ -63,7 +62,7 @@ class MideaMainLight(MideaFanLightEntity, LightEntity):
         """Turn on and optionally adjust brightness/color temperature."""
         brightness = kwargs.get(ATTR_BRIGHTNESS)
         if brightness is not None and brightness <= 0:
-            await self.coordinator.async_set_mode_bit(MODE_LIGHT, False)
+            await self.coordinator.async_turn_off_light()
             return
 
         kelvin = kwargs.get(ATTR_COLOR_TEMP_KELVIN)
@@ -78,4 +77,4 @@ class MideaMainLight(MideaFanLightEntity, LightEntity):
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the light off."""
-        await self.coordinator.async_set_mode_bit(MODE_LIGHT, False)
+        await self.coordinator.async_turn_off_light()

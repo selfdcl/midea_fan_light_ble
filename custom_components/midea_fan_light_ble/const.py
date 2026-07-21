@@ -46,6 +46,9 @@ COMMAND_TIMER_BY_HOURS = {
     6: 0x58,
 }
 
+FAN_PRESET_STANDARD = "标准风"
+FAN_PRESET_NATURAL = "自然风"
+
 COMMAND_BY_MODE_BIT = {
     MODE_LIGHT: COMMAND_LIGHT,
     MODE_FAN: COMMAND_FAN,
@@ -57,7 +60,6 @@ PLATFORMS: list[Platform] = [
     Platform.FAN,
     Platform.SWITCH,
     Platform.NUMBER,
-    Platform.SELECT,
 ]
 
 CONTROL_TIMEOUT = 15.0
