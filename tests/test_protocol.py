@@ -18,6 +18,7 @@ from protocol import (  # noqa: E402
     build_broadcast_release_frame,
     build_control_frame,
     embedded_address,
+    format_timer_minutes,
     parse_advertisement,
     parse_bbb1,
     percentage_to_speed,
@@ -137,6 +138,13 @@ class ProtocolTests(unittest.TestCase):
                 percentage_to_speed(speed_to_percentage(speed)),
                 speed,
             )
+
+    def test_format_timer_minutes(self) -> None:
+        """Countdown values are exposed as a stable HH:MM string."""
+        self.assertEqual(format_timer_minutes(-1), "00:00")
+        self.assertEqual(format_timer_minutes(0), "00:00")
+        self.assertEqual(format_timer_minutes(65), "01:05")
+        self.assertEqual(format_timer_minutes(360), "06:00")
 
 
 if __name__ == "__main__":

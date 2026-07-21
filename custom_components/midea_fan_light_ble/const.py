@@ -60,6 +60,7 @@ PLATFORMS: list[Platform] = [
     Platform.FAN,
     Platform.SWITCH,
     Platform.NUMBER,
+    Platform.SENSOR,
 ]
 
 CONTROL_TIMEOUT = 15.0

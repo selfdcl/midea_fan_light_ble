@@ -44,6 +44,11 @@
       "timer": {
         "name": "风扇定时"
       }
+    },
+    "sensor": {
+      "timer_remaining": {
+        "name": "定时剩余"
+      }
     }
   }
 }

@@ -119,6 +119,12 @@ def percentage_to_speed(percentage: int) -> int:
     return max(1, min(6, round(percentage * 6 / 100)))
 
 
+def format_timer_minutes(timer_minutes: int) -> str:
+    """Format a non-negative countdown value as zero-padded HH:MM."""
+    minutes = max(0, timer_minutes)
+    return f"{minutes // 60:02d}:{minutes % 60:02d}"
+
+
 def embedded_address(data: bytes) -> str:
     """Extract the normal-order address from an 0x06A8 status payload."""
     if len(data) != 20 or data[:3] != ADVERTISEMENT_HEADER:

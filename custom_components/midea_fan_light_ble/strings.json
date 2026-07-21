@@ -45,6 +45,11 @@
       "timer": {
         "name": "Fan timer"
       }
+    },
+    "sensor": {
+      "timer_remaining": {
+        "name": "Timer remaining"
+      }
     }
   }
 }
