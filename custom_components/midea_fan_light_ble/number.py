@@ -9,6 +9,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import MideaFanLightConfigEntry
 from .entity import MideaFanLightEntity
+from .protocol import timer_minutes_to_hour_slot
 
 
 async def async_setup_entry(
@@ -35,12 +36,11 @@ class MideaFanTimer(MideaFanLightEntity, NumberEntity):
         super().__init__(coordinator, entry_title, "timer")
 
     @property
-    def native_value(self) -> float | None:
-        """Return the remaining timer in hours."""
+    def native_value(self) -> int | None:
+        """Return the remaining timer's whole-hour preset slot."""
         if self.coordinator.data is None:
             return None
-        minutes = self.coordinator.data.timer_minutes
-        return minutes / 60
+        return timer_minutes_to_hour_slot(self.coordinator.data.timer_minutes)
 
     async def async_set_native_value(self, value: float) -> None:
         """Set timer to zero through six whole hours."""

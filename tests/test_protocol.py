@@ -23,6 +23,7 @@ from protocol import (  # noqa: E402
     parse_bbb1,
     percentage_to_speed,
     speed_to_percentage,
+    timer_minutes_to_hour_slot,
 )
 
 
@@ -155,6 +156,24 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual(format_timer_minutes(0), "00:00")
         self.assertEqual(format_timer_minutes(65), "01:05")
         self.assertEqual(format_timer_minutes(360), "06:00")
+
+    def test_timer_minutes_to_hour_slot(self) -> None:
+        """The preset slider never exposes a fractional floating-point value."""
+        fixtures = {
+            -1: 0,
+            0: 0,
+            1: 1,
+            59: 1,
+            60: 1,
+            61: 2,
+            179: 3,
+            180: 3,
+            360: 6,
+            361: 6,
+        }
+        for minutes, expected in fixtures.items():
+            with self.subTest(minutes=minutes):
+                self.assertEqual(timer_minutes_to_hour_slot(minutes), expected)
 
 
 if __name__ == "__main__":

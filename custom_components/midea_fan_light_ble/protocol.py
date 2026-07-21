@@ -125,6 +125,14 @@ def format_timer_minutes(timer_minutes: int) -> str:
     return f"{minutes // 60:02d}:{minutes % 60:02d}"
 
 
+def timer_minutes_to_hour_slot(timer_minutes: int) -> int:
+    """Map the remaining countdown to the 0..6 whole-hour preset slider."""
+    minutes = max(0, timer_minutes)
+    if minutes == 0:
+        return 0
+    return min(6, (minutes + 59) // 60)
+
+
 def embedded_address(data: bytes) -> str:
     """Extract the normal-order address from an 0x06A8 status payload."""
     if len(data) != 20 or data[:3] != ADVERTISEMENT_HEADER:
