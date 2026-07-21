@@ -9,6 +9,12 @@ import unittest
 FAN_PATH = (
     Path(__file__).parents[1] / "custom_components" / "midea_fan_light_ble" / "fan.py"
 )
+SWITCH_PATH = (
+    Path(__file__).parents[1]
+    / "custom_components"
+    / "midea_fan_light_ble"
+    / "switch.py"
+)
 
 
 class EntitySourceTests(unittest.TestCase):
@@ -52,6 +58,24 @@ class EntitySourceTests(unittest.TestCase):
         self.assertIn("async_set_preset_mode", methods)
         self.assertNotIn("oscillating", methods)
         self.assertNotIn("async_oscillate", methods)
+
+    def test_reverse_is_a_switch_without_oscillation_mapping(self) -> None:
+        """A dashboard can toggle direction through a dedicated switch entity."""
+        tree = ast.parse(SWITCH_PATH.read_text(encoding="utf-8"))
+        reverse_class = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.ClassDef) and node.name == "MideaReverse"
+        )
+        methods = {
+            node.name
+            for node in reverse_class.body
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        }
+
+        self.assertIn("is_on", methods)
+        self.assertIn("async_turn_on", methods)
+        self.assertIn("async_turn_off", methods)
 
 
 if __name__ == "__main__":

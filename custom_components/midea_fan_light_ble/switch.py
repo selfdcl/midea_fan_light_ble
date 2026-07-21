@@ -16,8 +16,13 @@ async def async_setup_entry(
     entry: MideaFanLightConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Set up the night-light switch."""
-    async_add_entities([MideaNightLight(entry.runtime_data, entry.title)])
+    """Set up convenience switches."""
+    async_add_entities(
+        [
+            MideaNightLight(entry.runtime_data, entry.title),
+            MideaReverse(entry.runtime_data, entry.title),
+        ]
+    )
 
 
 class MideaNightLight(MideaFanLightEntity, SwitchEntity):
@@ -41,3 +46,27 @@ class MideaNightLight(MideaFanLightEntity, SwitchEntity):
     async def async_turn_off(self, **kwargs) -> None:
         """Disable night-light mode."""
         await self.coordinator.async_set_mode_bit(MODE_NIGHT_LIGHT, False)
+
+
+class MideaReverse(MideaFanLightEntity, SwitchEntity):
+    """Expose fan direction as a real reverse switch without oscillation mapping."""
+
+    _attr_translation_key = "reverse"
+    _attr_icon = "mdi:fan-chevron-down"
+
+    def __init__(self, coordinator, entry_title: str) -> None:
+        """Initialize the reverse switch."""
+        super().__init__(coordinator, entry_title, "reverse")
+
+    @property
+    def is_on(self) -> bool | None:
+        """Return whether the running fan is reversed."""
+        return self.coordinator.data.reverse if self.coordinator.data else None
+
+    async def async_turn_on(self, **kwargs) -> None:
+        """Set reverse direction."""
+        await self.coordinator.async_set_direction(True)
+
+    async def async_turn_off(self, **kwargs) -> None:
+        """Set forward direction."""
+        await self.coordinator.async_set_direction(False)

@@ -38,6 +38,9 @@
     "switch": {
       "night_light": {
         "name": "Night light"
+      },
+      "reverse": {
+        "name": "Reverse"
       }
     },
     "number": {

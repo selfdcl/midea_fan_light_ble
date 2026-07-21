@@ -107,6 +107,16 @@ class ProtocolTests(unittest.TestCase):
             ),
         )
 
+    def test_build_broadcast_reverse_toggle(self) -> None:
+        """The generic bridge reproduces the original app's reverse frame."""
+        self.assertEqual(
+            build_broadcast_frame("80:22:00:60:73:D1", 0x1C, 8),
+            from_hex(
+                "11 4D 19 18 D1 73 60 00 22 80 01 F2 60 9E E0 22 80 A2 "
+                "46 44 31 D1 F3 51 D3 6D"
+            ),
+        )
+
     def test_build_broadcast_brightness(self) -> None:
         self.assertEqual(
             build_broadcast_frame(

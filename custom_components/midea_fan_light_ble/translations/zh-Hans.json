@@ -38,6 +38,9 @@
     "switch": {
       "night_light": {
         "name": "夜灯"
+      },
+      "reverse": {
+        "name": "反转"
       }
     },
     "number": {
