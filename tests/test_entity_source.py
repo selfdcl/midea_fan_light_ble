@@ -34,8 +34,8 @@ class EntitySourceTests(unittest.TestCase):
         )
         self.assertEqual(turn_on.args.kwarg.arg, "kwargs")
 
-    def test_fan_exposes_hasslife_compatibility_methods(self) -> None:
-        """HassLife uses sweep and preset mode for direction and wind type."""
+    def test_fan_exposes_modes_without_fake_oscillation(self) -> None:
+        """Expose wind modes without misrepresenting reverse as oscillation."""
         tree = ast.parse(FAN_PATH.read_text(encoding="utf-8"))
         fan_class = next(
             node
@@ -48,10 +48,10 @@ class EntitySourceTests(unittest.TestCase):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
         }
 
-        self.assertIn("oscillating", methods)
         self.assertIn("preset_mode", methods)
-        self.assertIn("async_oscillate", methods)
         self.assertIn("async_set_preset_mode", methods)
+        self.assertNotIn("oscillating", methods)
+        self.assertNotIn("async_oscillate", methods)
 
 
 if __name__ == "__main__":

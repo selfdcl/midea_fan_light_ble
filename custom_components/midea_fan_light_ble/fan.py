@@ -38,7 +38,6 @@ class MideaFan(MideaFanLightEntity, FanEntity):
         | FanEntityFeature.TURN_OFF
         | FanEntityFeature.SET_SPEED
         | FanEntityFeature.DIRECTION
-        | FanEntityFeature.OSCILLATE
         | FanEntityFeature.PRESET_MODE
     )
     _attr_percentage_step = 100 / 6
@@ -68,13 +67,6 @@ class MideaFan(MideaFanLightEntity, FanEntity):
         if self.coordinator.data is None or not self.coordinator.data.fan_on:
             return None
         return DIRECTION_REVERSE if self.coordinator.data.reverse else DIRECTION_FORWARD
-
-    @property
-    def oscillating(self) -> bool | None:
-        """Expose reverse rotation as HassLife's left-right sweep capability."""
-        if self.coordinator.data is None or not self.coordinator.data.fan_on:
-            return None
-        return self.coordinator.data.reverse
 
     @property
     def preset_mode(self) -> str | None:
@@ -114,10 +106,6 @@ class MideaFan(MideaFanLightEntity, FanEntity):
         if direction not in (DIRECTION_FORWARD, DIRECTION_REVERSE):
             raise HomeAssistantError(f"Unsupported fan direction: {direction}")
         await self.coordinator.async_set_direction(direction == DIRECTION_REVERSE)
-
-    async def async_oscillate(self, oscillating: bool) -> None:
-        """Map HassLife sweep on/off to reverse/forward rotation."""
-        await self.coordinator.async_set_direction(oscillating)
 
     async def async_set_preset_mode(self, preset_mode: str) -> None:
         """Select steady standard wind or locally modulated natural wind."""
