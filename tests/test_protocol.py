@@ -20,6 +20,8 @@ from protocol import (  # noqa: E402
     embedded_address,
     parse_advertisement,
     parse_bbb1,
+    percentage_to_speed,
+    speed_to_percentage,
 )
 
 
@@ -127,6 +129,14 @@ class ProtocolTests(unittest.TestCase):
                 "46 44 31 D1 F3 51 D3 71"
             ),
         )
+
+    def test_six_speed_percentage_round_trip(self) -> None:
+        """Every advertised percentage must map back to its original level."""
+        for speed in range(1, 7):
+            self.assertEqual(
+                percentage_to_speed(speed_to_percentage(speed)),
+                speed,
+            )
 
 
 if __name__ == "__main__":

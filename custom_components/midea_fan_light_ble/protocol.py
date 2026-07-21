@@ -105,6 +105,20 @@ def normalize_address(address: str) -> str:
     return ":".join(compact[index : index + 2] for index in range(0, 12, 2))
 
 
+def speed_to_percentage(speed: int) -> int:
+    """Convert one of six fan levels to Home Assistant percentage."""
+    if not 1 <= speed <= 6:
+        raise MideaProtocolError(f"Speed must be 1..6, got {speed}")
+    return round(speed * 100 / 6)
+
+
+def percentage_to_speed(percentage: int) -> int:
+    """Convert Home Assistant percentage back to the nearest fan level."""
+    if not 1 <= percentage <= 100:
+        raise MideaProtocolError(f"Percentage must be 1..100, got {percentage}")
+    return max(1, min(6, round(percentage * 6 / 100)))
+
+
 def embedded_address(data: bytes) -> str:
     """Extract the normal-order address from an 0x06A8 status payload."""
     if len(data) != 20 or data[:3] != ADVERTISEMENT_HEADER:

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import math
 from typing import Any
 
 from homeassistant.components.fan import (
@@ -18,6 +17,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from . import MideaFanLightConfigEntry
 from .const import FAN_PRESET_NATURAL, FAN_PRESET_STANDARD, MODE_FAN
 from .entity import MideaFanLightEntity
+from .protocol import percentage_to_speed, speed_to_percentage
 
 
 async def async_setup_entry(
@@ -59,7 +59,7 @@ class MideaFan(MideaFanLightEntity, FanEntity):
             return None
         if not self.coordinator.data.fan_on:
             return 0
-        return round(self.coordinator.data.speed * 100 / 6)
+        return speed_to_percentage(self.coordinator.data.speed)
 
     @property
     def current_direction(self) -> str | None:
@@ -98,8 +98,7 @@ class MideaFan(MideaFanLightEntity, FanEntity):
         if percentage <= 0:
             await self.coordinator.async_set_mode_bit(MODE_FAN, False)
             return
-        speed = max(1, min(6, math.ceil(percentage * 6 / 100)))
-        await self.coordinator.async_set_speed(speed)
+        await self.coordinator.async_set_speed(percentage_to_speed(percentage))
 
     async def async_set_direction(self, direction: str) -> None:
         """Set forward or reverse direction."""
