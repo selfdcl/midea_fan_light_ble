@@ -6,7 +6,15 @@ from homeassistant.const import Platform
 
 DOMAIN = "midea_fan_light_ble"
 CONF_BRIDGE_ACTION = "bridge_action"
+CONF_TEMPERATURE_ENTITY = "temperature_entity"
+CONF_AUTO_TEMP_2 = "auto_temp_2"
+CONF_AUTO_TEMP_3 = "auto_temp_3"
+CONF_AUTO_TEMP_4 = "auto_temp_4"
+CONF_AUTO_TEMP_5 = "auto_temp_5"
+CONF_AUTO_TEMP_6 = "auto_temp_6"
 BRIDGE_ACTION_SUFFIX = "_midea_ble_broadcast"
+
+DEFAULT_AUTO_THRESHOLDS = (22.0, 24.0, 26.0, 28.0, 30.0)
 
 MANUFACTURER_ID = 0x06A8
 ADVERTISEMENT_HEADER = bytes((0x81, 0x63, 0x01))
@@ -48,6 +56,7 @@ COMMAND_TIMER_BY_HOURS = {
 
 FAN_PRESET_STANDARD = "标准风"
 FAN_PRESET_NATURAL = "自然风"
+FAN_PRESET_AUTO = "自动"
 
 COMMAND_BY_MODE_BIT = {
     MODE_LIGHT: COMMAND_LIGHT,

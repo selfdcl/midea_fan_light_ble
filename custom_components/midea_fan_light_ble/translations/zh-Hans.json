@@ -24,6 +24,25 @@
       "not_supported": "发现的广播不是当前支持的美的风扇灯协议。"
     }
   },
+  "options": {
+    "step": {
+      "init": {
+        "title": "自动风模式",
+        "description": "选择房间温度传感器，并设置升到各档位的摄氏温度阈值。",
+        "data": {
+          "temperature_entity": "温度传感器",
+          "auto_temp_2": "达到此温度启用 2 档",
+          "auto_temp_3": "达到此温度启用 3 档",
+          "auto_temp_4": "达到此温度启用 4 档",
+          "auto_temp_5": "达到此温度启用 5 档",
+          "auto_temp_6": "达到此温度启用 6 档"
+        }
+      }
+    },
+    "error": {
+      "thresholds_not_ascending": "温度阈值必须从低到高依次递增。"
+    }
+  },
   "entity": {
     "light": {
       "main_light": {

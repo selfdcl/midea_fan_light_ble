@@ -25,6 +25,25 @@
       "not_supported": "The discovered advertisement is not a supported Midea fan light."
     }
   },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Automatic fan mode",
+        "description": "Choose the room temperature sensor and the Celsius threshold at which each higher speed starts.",
+        "data": {
+          "temperature_entity": "Temperature sensor",
+          "auto_temp_2": "Speed 2 from",
+          "auto_temp_3": "Speed 3 from",
+          "auto_temp_4": "Speed 4 from",
+          "auto_temp_5": "Speed 5 from",
+          "auto_temp_6": "Speed 6 from"
+        }
+      }
+    },
+    "error": {
+      "thresholds_not_ascending": "Temperature thresholds must be strictly ascending."
+    }
+  },
   "entity": {
     "light": {
       "main_light": {

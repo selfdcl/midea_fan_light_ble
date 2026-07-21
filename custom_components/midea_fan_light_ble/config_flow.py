@@ -8,11 +8,35 @@ import voluptuous as vol
 
 from homeassistant.components import bluetooth
 from homeassistant.components.bluetooth import BluetoothServiceInfoBleak
-from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
-from homeassistant.const import CONF_ADDRESS
+from homeassistant.components.sensor import SensorDeviceClass
+from homeassistant.config_entries import (
+    ConfigEntry,
+    ConfigFlow,
+    ConfigFlowResult,
+    OptionsFlowWithReload,
+)
+from homeassistant.const import CONF_ADDRESS, Platform, UnitOfTemperature
+from homeassistant.core import callback
+from homeassistant.helpers.selector import (
+    EntitySelector,
+    EntitySelectorConfig,
+    NumberSelector,
+    NumberSelectorConfig,
+    NumberSelectorMode,
+)
 
 from .bridge import async_available_bridge_actions
-from .const import CONF_BRIDGE_ACTION, DOMAIN
+from .const import (
+    CONF_AUTO_TEMP_2,
+    CONF_AUTO_TEMP_3,
+    CONF_AUTO_TEMP_4,
+    CONF_AUTO_TEMP_5,
+    CONF_AUTO_TEMP_6,
+    CONF_BRIDGE_ACTION,
+    CONF_TEMPERATURE_ENTITY,
+    DEFAULT_AUTO_THRESHOLDS,
+    DOMAIN,
+)
 from .coordinator import state_from_service_info
 from .protocol import normalize_address
 
@@ -27,6 +51,14 @@ class MideaFanLightConfigFlow(ConfigFlow, domain=DOMAIN):
     """Discover and add Midea BLE fan lights."""
 
     VERSION = 2
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(
+        config_entry: ConfigEntry,
+    ) -> MideaFanLightOptionsFlow:
+        """Return the automatic-mode options flow."""
+        return MideaFanLightOptionsFlow()
 
     def __init__(self) -> None:
         """Initialize the flow."""
@@ -140,4 +172,66 @@ class MideaFanLightConfigFlow(ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="user",
             data_schema=vol.Schema(schema),
+        )
+
+
+class MideaFanLightOptionsFlow(OptionsFlowWithReload):
+    """Configure the temperature-driven automatic fan mode."""
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Configure a temperature source and ascending speed thresholds."""
+        errors: dict[str, str] = {}
+        threshold_keys = (
+            CONF_AUTO_TEMP_2,
+            CONF_AUTO_TEMP_3,
+            CONF_AUTO_TEMP_4,
+            CONF_AUTO_TEMP_5,
+            CONF_AUTO_TEMP_6,
+        )
+        if user_input is not None:
+            thresholds = tuple(float(user_input[key]) for key in threshold_keys)
+            if any(left >= right for left, right in zip(thresholds, thresholds[1:])):
+                errors["base"] = "thresholds_not_ascending"
+            else:
+                return self.async_create_entry(data=user_input)
+
+        options = self.config_entry.options
+        form_values = user_input or options
+        temperature_default = form_values.get(CONF_TEMPERATURE_ENTITY)
+        temperature_marker: vol.Marker
+        if temperature_default:
+            temperature_marker = vol.Required(
+                CONF_TEMPERATURE_ENTITY, default=temperature_default
+            )
+        else:
+            temperature_marker = vol.Required(CONF_TEMPERATURE_ENTITY)
+
+        number_selector = NumberSelector(
+            NumberSelectorConfig(
+                min=-10,
+                max=50,
+                step=0.5,
+                mode=NumberSelectorMode.BOX,
+                unit_of_measurement=UnitOfTemperature.CELSIUS,
+            )
+        )
+        schema: dict[vol.Marker, Any] = {
+            temperature_marker: EntitySelector(
+                EntitySelectorConfig(
+                    domain=Platform.SENSOR,
+                    device_class=SensorDeviceClass.TEMPERATURE,
+                )
+            )
+        }
+        for key, default in zip(threshold_keys, DEFAULT_AUTO_THRESHOLDS):
+            schema[vol.Required(key, default=form_values.get(key, default))] = (
+                number_selector
+            )
+
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema(schema),
+            errors=errors,
         )

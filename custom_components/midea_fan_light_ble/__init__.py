@@ -10,7 +10,18 @@ from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import entity_registry as er
 
 from .bridge import async_available_bridge_actions
-from .const import CONF_BRIDGE_ACTION, DOMAIN, PLATFORMS
+from .const import (
+    CONF_AUTO_TEMP_2,
+    CONF_AUTO_TEMP_3,
+    CONF_AUTO_TEMP_4,
+    CONF_AUTO_TEMP_5,
+    CONF_AUTO_TEMP_6,
+    CONF_BRIDGE_ACTION,
+    CONF_TEMPERATURE_ENTITY,
+    DEFAULT_AUTO_THRESHOLDS,
+    DOMAIN,
+    PLATFORMS,
+)
 from .coordinator import MideaFanLightCoordinator
 
 MideaFanLightConfigEntry = ConfigEntry[MideaFanLightCoordinator]
@@ -34,7 +45,25 @@ async def async_setup_entry(
             data={**entry.data, CONF_BRIDGE_ACTION: bridge_action},
         )
 
-    coordinator = MideaFanLightCoordinator(hass, address, entry.title, bridge_action)
+    threshold_keys = (
+        CONF_AUTO_TEMP_2,
+        CONF_AUTO_TEMP_3,
+        CONF_AUTO_TEMP_4,
+        CONF_AUTO_TEMP_5,
+        CONF_AUTO_TEMP_6,
+    )
+    auto_thresholds = tuple(
+        float(entry.options.get(key, default))
+        for key, default in zip(threshold_keys, DEFAULT_AUTO_THRESHOLDS)
+    )
+    coordinator = MideaFanLightCoordinator(
+        hass,
+        address,
+        entry.title,
+        bridge_action,
+        entry.options.get(CONF_TEMPERATURE_ENTITY),
+        auto_thresholds,
+    )
     entry.runtime_data = coordinator
 
     registry = er.async_get(hass)

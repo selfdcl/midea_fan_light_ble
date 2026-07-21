@@ -133,6 +133,15 @@ def timer_minutes_to_hour_slot(timer_minutes: int) -> int:
     return min(6, (minutes + 59) // 60)
 
 
+def temperature_to_speed(
+    temperature: float, thresholds: tuple[float, float, float, float, float]
+) -> int:
+    """Map temperature through five ascending thresholds to fan speed 1..6."""
+    if any(left >= right for left, right in zip(thresholds, thresholds[1:])):
+        raise MideaProtocolError("Automatic fan thresholds must be ascending")
+    return 1 + sum(temperature >= threshold for threshold in thresholds)
+
+
 def embedded_address(data: bytes) -> str:
     """Extract the normal-order address from an 0x06A8 status payload."""
     if len(data) != 20 or data[:3] != ADVERTISEMENT_HEADER:

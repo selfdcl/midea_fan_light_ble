@@ -15,8 +15,11 @@ from homeassistant.components.bluetooth import (
 from homeassistant.components.bluetooth.passive_update_coordinator import (
     PassiveBluetoothDataUpdateCoordinator,
 )
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.const import ATTR_UNIT_OF_MEASUREMENT, UnitOfTemperature
+from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers.event import async_track_state_change_event
+from homeassistant.util.unit_conversion import TemperatureConverter
 
 from .const import (
     COMMAND_BRIGHTNESS,
@@ -27,6 +30,9 @@ from .const import (
     COMMAND_TIMER_BY_HOURS,
     CONTROL_TIMEOUT,
     DOMAIN,
+    FAN_PRESET_AUTO,
+    FAN_PRESET_NATURAL,
+    FAN_PRESET_STANDARD,
     MANUFACTURER_ID,
     MODE_FAN,
     MODE_LIGHT,
@@ -37,6 +43,7 @@ from .protocol import (
     MideaProtocolError,
     normalize_address,
     parse_advertisement,
+    temperature_to_speed,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -70,6 +77,8 @@ class MideaFanLightCoordinator(PassiveBluetoothDataUpdateCoordinator):
         address: str,
         name: str,
         bridge_action: str,
+        temperature_entity: str | None,
+        auto_thresholds: tuple[float, float, float, float, float],
     ) -> None:
         """Initialize the coordinator."""
         self.address = normalize_address(address)
@@ -79,6 +88,10 @@ class MideaFanLightCoordinator(PassiveBluetoothDataUpdateCoordinator):
         self._control_state_event: asyncio.Event | None = None
         self._natural_wind_enabled = False
         self._natural_wind_task: asyncio.Task[None] | None = None
+        self._auto_wind_enabled = False
+        self._temperature_entity = temperature_entity
+        self._auto_thresholds = auto_thresholds
+        self._auto_temperature_unsub: Callable[[], None] | None = None
         self.data: MideaFanLightState | None = None
         super().__init__(
             hass=hass,
@@ -101,8 +114,8 @@ class MideaFanLightCoordinator(PassiveBluetoothDataUpdateCoordinator):
         """Publish state and wake a pending broadcast command waiter."""
         self.data = state
         self._available = True
-        if self._natural_wind_enabled and not state.fan_on:
-            self._stop_natural_wind()
+        if not state.fan_on:
+            self._stop_wind_modes()
         self.async_update_listeners()
         if self._control_state_event is not None:
             self._control_state_event.set()
@@ -143,6 +156,15 @@ class MideaFanLightCoordinator(PassiveBluetoothDataUpdateCoordinator):
         """Return whether local natural-wind modulation is running."""
         return self._natural_wind_enabled
 
+    @property
+    def wind_preset(self) -> str:
+        """Return the active local wind preset."""
+        if self._auto_wind_enabled:
+            return FAN_PRESET_AUTO
+        if self._natural_wind_enabled:
+            return FAN_PRESET_NATURAL
+        return FAN_PRESET_STANDARD
+
     @callback
     def _stop_natural_wind(self) -> None:
         """Stop the natural-wind background task without changing fan power."""
@@ -156,9 +178,26 @@ class MideaFanLightCoordinator(PassiveBluetoothDataUpdateCoordinator):
             self.async_update_listeners()
 
     @callback
+    def _stop_auto_wind(self) -> None:
+        """Stop temperature-driven automatic speed changes."""
+        was_enabled = self._auto_wind_enabled
+        self._auto_wind_enabled = False
+        if self._auto_temperature_unsub is not None:
+            self._auto_temperature_unsub()
+            self._auto_temperature_unsub = None
+        if was_enabled:
+            self.async_update_listeners()
+
+    @callback
+    def _stop_wind_modes(self) -> None:
+        """Return to standard wind without changing fan power."""
+        self._stop_natural_wind()
+        self._stop_auto_wind()
+
+    @callback
     def async_shutdown(self) -> None:
         """Cancel integration-owned background work during config-entry unload."""
-        self._stop_natural_wind()
+        self._stop_wind_modes()
 
     async def _async_broadcast_and_wait(
         self,
@@ -224,7 +263,7 @@ class MideaFanLightCoordinator(PassiveBluetoothDataUpdateCoordinator):
     async def async_set_mode_bit(self, mode_bit: int, desired_on: bool) -> None:
         """Set a toggle feature through connectionless BLE advertising."""
         if mode_bit == MODE_FAN and not desired_on:
-            self._stop_natural_wind()
+            self._stop_wind_modes()
         async with self._control_lock:
             await self._async_toggle_locked(mode_bit, desired_on)
 
@@ -279,7 +318,7 @@ class MideaFanLightCoordinator(PassiveBluetoothDataUpdateCoordinator):
 
     async def async_set_speed(self, speed: int) -> None:
         """Set one of the six fan speeds, starting the fan when required."""
-        self._stop_natural_wind()
+        self._stop_wind_modes()
         async with self._control_lock:
             await self._async_set_speed_locked(speed)
 
@@ -288,6 +327,7 @@ class MideaFanLightCoordinator(PassiveBluetoothDataUpdateCoordinator):
         if not enabled:
             self._stop_natural_wind()
             return
+        self._stop_auto_wind()
         async with self._control_lock:
             await self._async_toggle_locked(MODE_FAN, True)
             if self._natural_wind_enabled:
@@ -316,6 +356,81 @@ class MideaFanLightCoordinator(PassiveBluetoothDataUpdateCoordinator):
         except Exception:
             _LOGGER.exception("%s: natural-wind loop failed", self.address)
             self._stop_natural_wind()
+
+    def _auto_temperature(self) -> float:
+        """Return the configured temperature converted to Celsius."""
+        if self._temperature_entity is None:
+            raise HomeAssistantError(
+                "Configure a temperature sensor before selecting automatic mode"
+            )
+        state = self.hass.states.get(self._temperature_entity)
+        if state is None or state.state in ("unknown", "unavailable"):
+            raise HomeAssistantError(
+                f"Temperature sensor {self._temperature_entity} is unavailable"
+            )
+        try:
+            temperature = float(state.state)
+        except ValueError as err:
+            raise HomeAssistantError(
+                f"Temperature sensor {self._temperature_entity} is not numeric"
+            ) from err
+        unit = state.attributes.get(ATTR_UNIT_OF_MEASUREMENT)
+        if unit and unit != UnitOfTemperature.CELSIUS:
+            try:
+                temperature = TemperatureConverter.convert(
+                    temperature, unit, UnitOfTemperature.CELSIUS
+                )
+            except ValueError as err:
+                raise HomeAssistantError(
+                    f"Temperature sensor {self._temperature_entity} has unsupported unit {unit}"
+                ) from err
+        return temperature
+
+    async def async_set_auto_wind(self, enabled: bool) -> None:
+        """Enable temperature-driven automatic fan speed."""
+        if not enabled:
+            self._stop_auto_wind()
+            return
+        temperature = self._auto_temperature()
+        speed = temperature_to_speed(temperature, self._auto_thresholds)
+        self._stop_natural_wind()
+        async with self._control_lock:
+            await self._async_set_speed_locked(speed)
+            if self._auto_wind_enabled:
+                return
+            self._auto_wind_enabled = True
+            self._auto_temperature_unsub = async_track_state_change_event(
+                self.hass,
+                [self._temperature_entity],
+                self._auto_temperature_changed,
+            )
+            self.async_update_listeners()
+
+    @callback
+    def _auto_temperature_changed(self, event: Event) -> None:
+        """Schedule a speed update after the selected temperature changes."""
+        if not self._auto_wind_enabled:
+            return
+        self.hass.async_create_task(
+            self._async_apply_auto_temperature(),
+            f"{DOMAIN} automatic wind {self.address}",
+            eager_start=True,
+        )
+
+    async def _async_apply_auto_temperature(self) -> None:
+        """Apply the current temperature to the fan speed."""
+        try:
+            temperature = self._auto_temperature()
+            speed = temperature_to_speed(temperature, self._auto_thresholds)
+            async with self._control_lock:
+                if not self._auto_wind_enabled:
+                    return
+                await self._async_set_speed_locked(speed)
+        except HomeAssistantError:
+            _LOGGER.warning(
+                "%s: automatic wind skipped because its temperature source is unavailable",
+                self.address,
+            )
 
     async def async_set_direction(self, reverse: bool) -> None:
         """Set fan direction; the device command toggles the current direction."""

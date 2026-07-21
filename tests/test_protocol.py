@@ -23,6 +23,7 @@ from protocol import (  # noqa: E402
     parse_bbb1,
     percentage_to_speed,
     speed_to_percentage,
+    temperature_to_speed,
     timer_minutes_to_hour_slot,
 )
 
@@ -174,6 +175,30 @@ class ProtocolTests(unittest.TestCase):
         for minutes, expected in fixtures.items():
             with self.subTest(minutes=minutes):
                 self.assertEqual(timer_minutes_to_hour_slot(minutes), expected)
+
+    def test_temperature_to_speed(self) -> None:
+        """Automatic mode maps configured Celsius thresholds to six speeds."""
+        thresholds = (22.0, 24.0, 26.0, 28.0, 30.0)
+        fixtures = {
+            10.0: 1,
+            21.9: 1,
+            22.0: 2,
+            25.0: 3,
+            26.0: 4,
+            29.9: 5,
+            30.0: 6,
+            40.0: 6,
+        }
+        for temperature, expected in fixtures.items():
+            with self.subTest(temperature=temperature):
+                self.assertEqual(
+                    temperature_to_speed(temperature, thresholds), expected
+                )
+
+    def test_temperature_thresholds_must_be_ascending(self) -> None:
+        """Reject ambiguous automatic-mode threshold configurations."""
+        with self.assertRaises(MideaProtocolError):
+            temperature_to_speed(25.0, (22.0, 24.0, 24.0, 28.0, 30.0))
 
 
 if __name__ == "__main__":

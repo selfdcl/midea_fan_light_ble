@@ -4,18 +4,18 @@ from __future__ import annotations
 
 from typing import Any
 
-from homeassistant.components.fan import (
-    DIRECTION_FORWARD,
-    DIRECTION_REVERSE,
-    FanEntity,
-    FanEntityFeature,
-)
+from homeassistant.components.fan import FanEntity, FanEntityFeature
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import MideaFanLightConfigEntry
-from .const import FAN_PRESET_NATURAL, FAN_PRESET_STANDARD, MODE_FAN
+from .const import (
+    FAN_PRESET_AUTO,
+    FAN_PRESET_NATURAL,
+    FAN_PRESET_STANDARD,
+    MODE_FAN,
+)
 from .entity import MideaFanLightEntity
 from .protocol import percentage_to_speed, speed_to_percentage
 
@@ -37,11 +37,10 @@ class MideaFan(MideaFanLightEntity, FanEntity):
         FanEntityFeature.TURN_ON
         | FanEntityFeature.TURN_OFF
         | FanEntityFeature.SET_SPEED
-        | FanEntityFeature.DIRECTION
         | FanEntityFeature.PRESET_MODE
     )
     _attr_percentage_step = 100 / 6
-    _attr_preset_modes = [FAN_PRESET_STANDARD, FAN_PRESET_NATURAL]
+    _attr_preset_modes = [FAN_PRESET_STANDARD, FAN_PRESET_NATURAL, FAN_PRESET_AUTO]
 
     def __init__(self, coordinator, entry_title: str) -> None:
         """Initialize the fan."""
@@ -62,20 +61,9 @@ class MideaFan(MideaFanLightEntity, FanEntity):
         return speed_to_percentage(self.coordinator.data.speed)
 
     @property
-    def current_direction(self) -> str | None:
-        """Return current forward/reverse direction."""
-        if self.coordinator.data is None or not self.coordinator.data.fan_on:
-            return None
-        return DIRECTION_REVERSE if self.coordinator.data.reverse else DIRECTION_FORWARD
-
-    @property
     def preset_mode(self) -> str | None:
-        """Return standard or natural wind mode."""
-        return (
-            FAN_PRESET_NATURAL
-            if self.coordinator.natural_wind_enabled
-            else FAN_PRESET_STANDARD
-        )
+        """Return the active standard, natural, or automatic wind mode."""
+        return self.coordinator.wind_preset
 
     async def async_turn_on(
         self,
@@ -84,6 +72,9 @@ class MideaFan(MideaFanLightEntity, FanEntity):
         **kwargs: Any,
     ) -> None:
         """Turn the fan on."""
+        if preset_mode is not None:
+            await self.async_set_preset_mode(preset_mode)
+            return
         if percentage is not None and percentage > 0:
             await self.async_set_percentage(percentage)
             return
@@ -100,14 +91,14 @@ class MideaFan(MideaFanLightEntity, FanEntity):
             return
         await self.coordinator.async_set_speed(percentage_to_speed(percentage))
 
-    async def async_set_direction(self, direction: str) -> None:
-        """Set forward or reverse direction."""
-        if direction not in (DIRECTION_FORWARD, DIRECTION_REVERSE):
-            raise HomeAssistantError(f"Unsupported fan direction: {direction}")
-        await self.coordinator.async_set_direction(direction == DIRECTION_REVERSE)
-
     async def async_set_preset_mode(self, preset_mode: str) -> None:
-        """Select steady standard wind or locally modulated natural wind."""
+        """Select standard, natural, or temperature-driven automatic wind."""
         if preset_mode not in self.preset_modes:
             raise HomeAssistantError(f"Unsupported fan preset: {preset_mode}")
-        await self.coordinator.async_set_natural_wind(preset_mode == FAN_PRESET_NATURAL)
+        if preset_mode == FAN_PRESET_NATURAL:
+            await self.coordinator.async_set_natural_wind(True)
+        elif preset_mode == FAN_PRESET_AUTO:
+            await self.coordinator.async_set_auto_wind(True)
+        else:
+            await self.coordinator.async_set_natural_wind(False)
+            await self.coordinator.async_set_auto_wind(False)

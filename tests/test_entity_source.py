@@ -42,7 +42,8 @@ class EntitySourceTests(unittest.TestCase):
 
     def test_fan_exposes_modes_without_fake_oscillation(self) -> None:
         """Expose wind modes without misrepresenting reverse as oscillation."""
-        tree = ast.parse(FAN_PATH.read_text(encoding="utf-8"))
+        source = FAN_PATH.read_text(encoding="utf-8")
+        tree = ast.parse(source)
         fan_class = next(
             node
             for node in tree.body
@@ -56,8 +57,12 @@ class EntitySourceTests(unittest.TestCase):
 
         self.assertIn("preset_mode", methods)
         self.assertIn("async_set_preset_mode", methods)
+        self.assertNotIn("current_direction", methods)
+        self.assertNotIn("async_set_direction", methods)
         self.assertNotIn("oscillating", methods)
         self.assertNotIn("async_oscillate", methods)
+        self.assertNotIn("FanEntityFeature.DIRECTION", source)
+        self.assertIn("FAN_PRESET_AUTO", source)
 
     def test_reverse_is_a_switch_without_oscillation_mapping(self) -> None:
         """A dashboard can toggle direction through a dedicated switch entity."""
