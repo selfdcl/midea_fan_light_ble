@@ -52,6 +52,123 @@ Wi-Fi、API 和 OTA secrets，再编译刷入一次即可。它同时保留标�
 HassLife 中只添加“灯”和“风扇”两个主实体即可；夜灯与定时留在 Home Assistant 本地时不会
 额外占用云端设备名额。
 
+## 接入米家与小爱同学
+
+本集成负责风扇灯与 Home Assistant 之间的本地通信，不会让设备直接成为原生米家设备。
+如果需要在米家“其他平台设备”中显示，或使用小爱同学控制，仍需经过 HassLife、巴法云等
+已获小米平台接入资格的云端桥接服务。
+
+需要特别注意，“能被小爱控制”和“原生接入米家”不是同一件事。第三方桥接设备通常依赖
+“小米云 → 第三方云 → Home Assistant”，断网时不可用；部分能力也可能只支持语音控制，
+不能完整参与米家自动化。
+
+### 方案选择
+
+| 方案 | 适用场景 | 注意事项 |
+| --- | --- | --- |
+| HassLife | 已经在 Home Assistant 中存在的实体 | 配置最简单；本项目已针对其风扇能力做兼容 |
+| [Bemfa Cloud](https://github.com/bemfa/bemfa_cloud_ha) | 将 HA 实体同步到巴法云，再由米家或小爱控制 | 推荐使用私钥登录；支持灯、风扇、开关等类型 |
+| [BeHome](https://github.com/bemfa/behome) | 把巴法云中原本存在的设备导入 HA | 方向与 Bemfa Cloud 相反，不用于导出本项目实体 |
+| [机智云 GSmart](https://docs.gizwits.com/zh-cn/UserManual/NewDev/VoiceApplicationOpeningTutorial.html)、[CozyLife](https://www.cozylife.app/platform/zh/) | 自研或准备量产的硬件产品 | 接入流程更偏产品化和商业化 |
+| 易微联、涂鸦 | 使用其模组、SDK 或生态设备 | 通常只能接入各自平台支持的产品，不是任意 HA 实体桥接器 |
+| [小米 IoT / 小爱开放平台](https://developers.xiaoai.mi.com/miot) | 正式量产并希望获得原生体验的产品 | 需要平台准入、审核及相关产品认证 |
+
+点灯科技/Blinker 的个人小爱接入服务已于 2025 年 7 月 1 日下线，不再建议作为新方案。
+
+### 通过巴法云接入
+
+本项目对应的正确数据方向为：
+
+```text
+美的 BLE 风扇灯 → Midea BLE Fan Light → Home Assistant
+                                      ↓
+                              Bemfa Cloud → 巴法云 → 米家/小爱
+```
+
+安装与配置步骤：
+
+1. 在 HACS 的“自定义存储库”中添加：
+
+   ```text
+   https://github.com/bemfa/bemfa_cloud_ha
+   ```
+
+   类别选择“集成”，然后安装 **Bemfa Cloud** 并完整重启 Home Assistant。
+
+2. 打开“设置 → 设备与服务 → 添加集成”，搜索 **Bemfa Cloud**。
+3. 推荐选择“私钥”认证，填写巴法云控制台中的用户私钥。
+4. 选择本集成提供的实体。默认映射关系为：
+
+   | 本项目实体 | 巴法云类型 | 主题后缀 |
+   | --- | --- | --- |
+   | 主灯 `light` | 灯泡 | `002` |
+   | 风扇 `fan` | 风扇 | `003` |
+   | 夜灯 `switch` | 开关 | `006` |
+
+5. 在米家中进入“我的 → 其他平台设备 → 添加 → 巴法”，绑定同一个巴法云账号。
+
+Bemfa Cloud 会订阅云端控制消息并调用对应的 HA 实体，同时把 HA 状态变化更新到巴法云。
+修改没有稳定 `unique_id` 的实体 ID 可能产生新的巴法主题；日常改名应优先修改实体显示名称。
+
+### BeHome 与 Bemfa Cloud 的区别
+
+这两个集成可以共存，但不要混淆用途：
+
+```text
+BeHome:      巴法云设备 → Home Assistant
+Bemfa Cloud: Home Assistant 实体 → 巴法云/米家/小爱
+```
+
+如果只想把本项目的主灯和风扇交给小爱控制，只安装 Bemfa Cloud 即可。Bemfa Cloud 会过滤
+BeHome 生成的实体，避免再次上传形成控制回环。
+
+#### BeHome 1.2.0 配置向导出现 500
+
+在 Home Assistant 2025.12 及更高版本中，`OptionsFlow.config_entry` 由 HA 自动提供，旧代码
+再执行 `self.config_entry = config_entry` 会导致：
+
+```text
+无法加载配置向导: 500 Internal Server Error
+```
+
+这是 BeHome 1.2.0 的已知兼容问题。优先升级到已修复的 BeHome 版本；如果当时仍无新版，
+可临时编辑 `/config/custom_components/behome/config_flow.py`。
+
+将：
+
+```python
+def async_get_options_flow(config_entry):
+    return BeHomeOptionsFlow(config_entry)
+```
+
+改为：
+
+```python
+def async_get_options_flow(config_entry):
+    return BeHomeOptionsFlow()
+```
+
+并删除 `BeHomeOptionsFlow.__init__` 中手动保存配置条目的代码：
+
+```python
+self.config_entry = config_entry
+```
+
+该构造函数中的 `_sync_mode` 赋值在 BeHome 1.2.0 中没有被使用，可以连同构造函数一起删除。
+修改后必须完整重启 Home Assistant。相关背景见
+[BeHome Issue #14](https://github.com/bemfa/behome/issues/14) 和
+[Home Assistant OptionsFlow 迁移说明](https://developers.home-assistant.io/blog/2024/11/12/options-flow/)。
+
+### 自建同类桥接服务
+
+可以自行开发类似 HassLife 或巴法云的服务。技术上需要用户账号与 OAuth、设备模型、状态
+查询与控制接口、状态上报、MQTT/WebSocket 长连接，以及对应的 HA 自定义集成。真正的门槛
+是小米侧准入：只有得到智能家居服务合作资格和客户端凭据，服务才可以作为自己的品牌出现
+在米家“其他平台设备”列表中。个人自建公网服务不能仅靠普通米家 API 注册任意虚拟设备。
+
+如果只是个人或少量用户使用，建议保留本项目的 BLE 本地控制，另行使用 HassLife 或
+Bemfa Cloud 做可替换的云端适配层；准备量产时再考虑小米官方、机智云或 CozyLife。
+
 ## 通过 HACS 安装
 
 1. 打开 HACS，进入“集成”。
