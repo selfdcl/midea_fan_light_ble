@@ -60,6 +60,32 @@ class CoordinatorSourceTests(unittest.TestCase):
 
         self.assertIn("_publish_state", called_methods)
 
+    def test_bridge_call_includes_device_xor_base(self) -> None:
+        """Every ESPHome bridge call must carry the selected device key."""
+        source = COORDINATOR_PATH.read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        coordinator_class = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.ClassDef)
+            and node.name == "MideaFanLightCoordinator"
+        )
+        method = next(
+            node
+            for node in coordinator_class.body
+            if isinstance(node, ast.AsyncFunctionDef)
+            and node.name == "_async_broadcast_and_wait"
+        )
+        dictionary_keys = {
+            key.value
+            for node in ast.walk(method)
+            if isinstance(node, ast.Dict)
+            for key in node.keys
+            if isinstance(key, ast.Constant) and isinstance(key.value, str)
+        }
+
+        self.assertIn("xor_base", dictionary_keys)
+
 
 if __name__ == "__main__":
     unittest.main()

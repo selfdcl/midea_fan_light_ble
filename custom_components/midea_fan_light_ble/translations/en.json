@@ -15,7 +15,17 @@
         "data": {
           "bridge_action": "ESPHome broadcast bridge"
         }
+      },
+      "protocol": {
+        "title": "Enter the device protocol key",
+        "description": "This device ({address}) has not been captured before. Enter its 16-byte XOR base from a verified app control capture.",
+        "data": {
+          "xor_base": "16-byte XOR base"
+        }
       }
+    },
+    "error": {
+      "invalid_xor_base": "Enter exactly 16 hexadecimal bytes."
     },
     "abort": {
       "already_configured": "This device is already configured.",
@@ -27,9 +37,10 @@
   "options": {
     "step": {
       "init": {
-        "title": "Automatic fan mode",
-        "description": "Choose the room temperature sensor and the Celsius threshold at which each higher speed starts.",
+        "title": "Device protocol and automatic fan mode",
+        "description": "Configure the per-device protocol key, room temperature sensor, and Celsius speed thresholds.",
         "data": {
+          "xor_base": "16-byte XOR base",
           "temperature_entity": "Temperature sensor",
           "auto_temp_2": "Speed 2 from",
           "auto_temp_3": "Speed 3 from",
@@ -40,6 +51,7 @@
       }
     },
     "error": {
+      "invalid_xor_base": "Enter exactly 16 hexadecimal bytes.",
       "thresholds_not_ascending": "Temperature thresholds must be strictly ascending."
     }
   },

@@ -18,7 +18,7 @@ COMMAND_NIGHT_LIGHT = 0x5F
 
 _CONTROL_COMPANY_ID = bytes((0x11, 0x4D))
 
-_XOR_BASE = bytes(
+DEFAULT_XOR_BASE = bytes(
     (
         0xD1,
         0xF3,
@@ -38,6 +38,19 @@ _XOR_BASE = bytes(
         0x31,
     )
 )
+
+KNOWN_XOR_BASES: dict[str, bytes] = {
+    "80:22:00:60:73:D1": DEFAULT_XOR_BASE,
+    "80:22:00:40:83:19": bytes.fromhex(
+        "19 3B 99 C3 83 A5 03 40 62 C0 22 80 A2 7E 9C 59"
+    ),
+    "80:22:00:91:78:26": bytes.fromhex(
+        "26 48 A6 09 78 9A F8 91 B3 11 22 80 A2 D1 9E B7"
+    ),
+    "80:22:00:A0:2F:DA": bytes.fromhex(
+        "DA FC 5A CF 2F 51 AF A0 C2 20 22 80 A2 4B 09 7A"
+    ),
+}
 
 
 class MideaProtocolError(ValueError):
@@ -103,6 +116,41 @@ def normalize_address(address: str) -> str:
     if len(compact) != 12 or any(char not in "0123456789ABCDEF" for char in compact):
         raise MideaProtocolError(f"Invalid Bluetooth address: {address}")
     return ":".join(compact[index : index + 2] for index in range(0, 12, 2))
+
+
+def normalize_xor_base(xor_base: bytes | bytearray | str) -> bytes:
+    """Return a validated 16-byte device-specific XOR base."""
+    if isinstance(xor_base, str):
+        compact = (
+            xor_base.replace(" ", "")
+            .replace(":", "")
+            .replace("-", "")
+            .replace("_", "")
+        )
+        if len(compact) != 32 or any(
+            char not in "0123456789abcdefABCDEF" for char in compact
+        ):
+            raise MideaProtocolError(
+                "XOR base must contain exactly 16 hexadecimal bytes"
+            )
+        return bytes.fromhex(compact)
+
+    result = bytes(xor_base)
+    if len(result) != 16:
+        raise MideaProtocolError(
+            f"XOR base must contain exactly 16 bytes, got {len(result)}"
+        )
+    return result
+
+
+def format_xor_base(xor_base: bytes | bytearray | str) -> str:
+    """Return the canonical compact uppercase representation of an XOR base."""
+    return normalize_xor_base(xor_base).hex().upper()
+
+
+def xor_base_for_address(address: str) -> bytes | None:
+    """Return a captured device-specific XOR base when the address is known."""
+    return KNOWN_XOR_BASES.get(normalize_address(address))
 
 
 def speed_to_percentage(speed: int) -> int:
@@ -171,7 +219,12 @@ def parse_advertisement(
     )
 
 
-def parse_bbb1(data: bytes, *, rssi: int | None = None) -> MideaFanLightState:
+def parse_bbb1(
+    data: bytes,
+    *,
+    rssi: int | None = None,
+    xor_base: bytes | bytearray | str = DEFAULT_XOR_BASE,
+) -> MideaFanLightState:
     """Decode a 13-byte BBB1 GATT notification."""
     if len(data) != 13:
         raise MideaProtocolError(f"Expected 13 BBB1 bytes, got {len(data)}")
@@ -179,8 +232,9 @@ def parse_bbb1(data: bytes, *, rssi: int | None = None) -> MideaFanLightState:
         raise MideaProtocolError("Unexpected BBB1 frame header")
 
     sequence = (data[1] >> 4) & 0x0F
+    base = normalize_xor_base(xor_base)
     decoded = bytes(
-        data[2 + index] ^ _XOR_BASE[(sequence + 14 + index) & 0x0F]
+        data[2 + index] ^ base[(sequence + 14 + index) & 0x0F]
         for index in range(11)
     )
     if decoded[:2] != bytes((0x08, 0x00)):
@@ -198,7 +252,12 @@ def parse_bbb1(data: bytes, *, rssi: int | None = None) -> MideaFanLightState:
     )
 
 
-def build_control_frame(command: int, sequence: int) -> bytes:
+def build_control_frame(
+    command: int,
+    sequence: int,
+    *,
+    xor_base: bytes | bytearray | str = DEFAULT_XOR_BASE,
+) -> bytes:
     """Build an original-compatible 18-byte BBB0 write frame."""
     if not 0 <= sequence <= 0x0F:
         raise MideaProtocolError(f"Sequence must be 0..15, got {sequence}")
@@ -211,8 +270,9 @@ def build_control_frame(command: int, sequence: int) -> bytes:
     plaintext[3] = command
     plaintext[15] = sum(plaintext[:15]) & 0xFF
 
+    base = normalize_xor_base(xor_base)
     encrypted = bytes(
-        plaintext[index] ^ _XOR_BASE[(sequence + 14 + index) & 0x0F]
+        plaintext[index] ^ base[(sequence + 14 + index) & 0x0F]
         for index in range(16)
     )
     return bytes((0x10, (sequence << 4) | 0x0B)) + encrypted
@@ -225,6 +285,7 @@ def build_broadcast_frame(
     *,
     value: int = 0,
     light_command: bool = False,
+    xor_base: bytes | bytearray | str = DEFAULT_XOR_BASE,
 ) -> bytes:
     """Build a connectionless 0x4D11 command advertisement."""
     if not 0 <= sequence <= 0x0F:
@@ -233,12 +294,13 @@ def build_broadcast_frame(
         raise MideaProtocolError("Command and value must be bytes")
 
     address_bytes = bytes.fromhex(normalize_address(address).replace(":", ""))
+    base = normalize_xor_base(xor_base)
     frame = bytearray(
         _CONTROL_COMPANY_ID
         + bytes((0x19, 0x10 | sequence))
         + bytes(reversed(address_bytes))
         + bytes((0x01,))
-        + bytes(_XOR_BASE[(sequence + 14 + index) & 0x0F] for index in range(15))
+        + bytes(base[(sequence + 14 + index) & 0x0F] for index in range(15))
     )
     tail_offset = 11
     frame[tail_offset] ^= 0x01
@@ -253,6 +315,11 @@ def build_broadcast_frame(
     return bytes(frame)
 
 
-def build_broadcast_release_frame(address: str, sequence: int) -> bytes:
+def build_broadcast_release_frame(
+    address: str,
+    sequence: int,
+    *,
+    xor_base: bytes | bytearray | str = DEFAULT_XOR_BASE,
+) -> bytes:
     """Build the release packet sent after a 0x4D11 command."""
-    return build_broadcast_frame(address, 0, sequence)
+    return build_broadcast_frame(address, 0, sequence, xor_base=xor_base)

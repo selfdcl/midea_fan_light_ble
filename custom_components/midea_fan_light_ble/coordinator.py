@@ -41,6 +41,7 @@ from .const import (
 from .protocol import (
     MideaFanLightState,
     MideaProtocolError,
+    format_xor_base,
     normalize_address,
     parse_advertisement,
     temperature_to_speed,
@@ -77,6 +78,7 @@ class MideaFanLightCoordinator(PassiveBluetoothDataUpdateCoordinator):
         address: str,
         name: str,
         bridge_action: str,
+        xor_base: bytes | bytearray | str,
         temperature_entity: str | None,
         auto_thresholds: tuple[float, float, float, float, float],
     ) -> None:
@@ -84,6 +86,7 @@ class MideaFanLightCoordinator(PassiveBluetoothDataUpdateCoordinator):
         self.address = normalize_address(address)
         self._device_name = name
         self._bridge_action = bridge_action
+        self._xor_base = format_xor_base(xor_base)
         self._control_lock = asyncio.Lock()
         self._control_state_event: asyncio.Event | None = None
         self._natural_wind_enabled = False
@@ -212,12 +215,13 @@ class MideaFanLightCoordinator(PassiveBluetoothDataUpdateCoordinator):
         self._control_state_event = event
         try:
             _LOGGER.debug(
-                "%s: broadcast bridge=%s command=%02X value=%02X light=%s",
+                "%s: broadcast bridge=%s command=%02X value=%02X light=%s key=%s",
                 self.address,
                 self._bridge_action,
                 command,
                 value,
                 light_command,
+                self._xor_base[-8:],
             )
             await self.hass.services.async_call(
                 "esphome",
@@ -227,6 +231,7 @@ class MideaFanLightCoordinator(PassiveBluetoothDataUpdateCoordinator):
                     "command": command,
                     "value": value,
                     "light_command": light_command,
+                    "xor_base": self._xor_base,
                 },
                 blocking=True,
             )

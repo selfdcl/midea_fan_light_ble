@@ -6,6 +6,7 @@ from homeassistant.const import Platform
 
 DOMAIN = "midea_fan_light_ble"
 CONF_BRIDGE_ACTION = "bridge_action"
+CONF_XOR_BASE = "xor_base"
 CONF_TEMPERATURE_ENTITY = "temperature_entity"
 CONF_AUTO_TEMP_2 = "auto_temp_2"
 CONF_AUTO_TEMP_3 = "auto_temp_3"

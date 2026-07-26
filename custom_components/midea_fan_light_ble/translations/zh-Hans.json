@@ -15,7 +15,17 @@
         "data": {
           "bridge_action": "ESPHome 广播控制桥"
         }
+      },
+      "protocol": {
+        "title": "输入设备协议基序列",
+        "description": "尚未收录设备（{address}）的协议数据。请输入从原厂 App 控制抓包中验证出的 16 字节 XOR 基序列。",
+        "data": {
+          "xor_base": "16 字节 XOR 基序列"
+        }
       }
+    },
+    "error": {
+      "invalid_xor_base": "请输入正好 16 个十六进制字节。"
     },
     "abort": {
       "already_configured": "该设备已经添加。",
@@ -27,9 +37,10 @@
   "options": {
     "step": {
       "init": {
-        "title": "自动风模式",
-        "description": "选择房间温度传感器，并设置升到各档位的摄氏温度阈值。",
+        "title": "设备协议与自动风模式",
+        "description": "配置此设备的协议基序列、房间温度传感器和各档位的摄氏温度阈值。",
         "data": {
+          "xor_base": "16 字节 XOR 基序列",
           "temperature_entity": "温度传感器",
           "auto_temp_2": "达到此温度启用 2 档",
           "auto_temp_3": "达到此温度启用 3 档",
@@ -40,6 +51,7 @@
       }
     },
     "error": {
+      "invalid_xor_base": "请输入正好 16 个十六进制字节。",
       "thresholds_not_ascending": "温度阈值必须从低到高依次递增。"
     }
   },

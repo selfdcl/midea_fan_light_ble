@@ -34,11 +34,17 @@ from .const import (
     CONF_AUTO_TEMP_6,
     CONF_BRIDGE_ACTION,
     CONF_TEMPERATURE_ENTITY,
+    CONF_XOR_BASE,
     DEFAULT_AUTO_THRESHOLDS,
     DOMAIN,
 )
 from .coordinator import state_from_service_info
-from .protocol import normalize_address
+from .protocol import (
+    MideaProtocolError,
+    format_xor_base,
+    normalize_address,
+    xor_base_for_address,
+)
 
 
 def _device_title(address: str) -> str:
@@ -50,7 +56,7 @@ def _device_title(address: str) -> str:
 class MideaFanLightConfigFlow(ConfigFlow, domain=DOMAIN):
     """Discover and add Midea BLE fan lights."""
 
-    VERSION = 2
+    VERSION = 3
 
     @staticmethod
     @callback
@@ -65,6 +71,32 @@ class MideaFanLightConfigFlow(ConfigFlow, domain=DOMAIN):
         self._discovery_info: BluetoothServiceInfoBleak | None = None
         self._discovered_devices: dict[str, BluetoothServiceInfoBleak] = {}
         self._bridge_actions: dict[str, str] = {}
+        self._pending_address: str | None = None
+        self._pending_bridge: str | None = None
+
+    def _entry_data(self, address: str, bridge_action: str) -> dict[str, str]:
+        """Build config-entry data for a device with a known protocol key."""
+        base = xor_base_for_address(address)
+        if base is None:
+            raise MideaProtocolError(f"No captured XOR base for {address}")
+        return {
+            CONF_ADDRESS: address,
+            CONF_BRIDGE_ACTION: bridge_action,
+            CONF_XOR_BASE: format_xor_base(base),
+        }
+
+    async def _async_create_or_request_key(
+        self, address: str, bridge_action: str
+    ) -> ConfigFlowResult:
+        """Create known devices immediately or ask for an unknown device key."""
+        if xor_base_for_address(address) is not None:
+            return self.async_create_entry(
+                title=_device_title(address),
+                data=self._entry_data(address, bridge_action),
+            )
+        self._pending_address = address
+        self._pending_bridge = bridge_action
+        return await self.async_step_protocol()
 
     def _refresh_bridges(self) -> bool:
         """Refresh compatible ESPHome broadcast bridge actions."""
@@ -108,12 +140,8 @@ class MideaFanLightConfigFlow(ConfigFlow, domain=DOMAIN):
 
         address = normalize_address(self._discovery_info.address)
         if user_input is not None:
-            return self.async_create_entry(
-                title=_device_title(address),
-                data={
-                    CONF_ADDRESS: address,
-                    CONF_BRIDGE_ACTION: self._selected_bridge(user_input),
-                },
+            return await self._async_create_or_request_key(
+                address, self._selected_bridge(user_input)
             )
 
         return self.async_show_form(
@@ -137,12 +165,9 @@ class MideaFanLightConfigFlow(ConfigFlow, domain=DOMAIN):
             discovery_info = self._discovered_devices[address]
             await self.async_set_unique_id(address, raise_on_progress=False)
             self._abort_if_unique_id_configured()
-            return self.async_create_entry(
-                title=_device_title(address),
-                data={
-                    CONF_ADDRESS: normalize_address(discovery_info.address),
-                    CONF_BRIDGE_ACTION: self._selected_bridge(user_input),
-                },
+            return await self._async_create_or_request_key(
+                normalize_address(discovery_info.address),
+                self._selected_bridge(user_input),
             )
 
         current_ids = self._async_current_ids(include_ignore=False)
@@ -174,6 +199,36 @@ class MideaFanLightConfigFlow(ConfigFlow, domain=DOMAIN):
             data_schema=vol.Schema(schema),
         )
 
+    async def async_step_protocol(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Collect the per-device XOR base for a device not yet captured."""
+        if self._pending_address is None or self._pending_bridge is None:
+            return self.async_abort(reason="no_devices_found")
+
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            try:
+                xor_base = format_xor_base(user_input[CONF_XOR_BASE])
+            except MideaProtocolError:
+                errors[CONF_XOR_BASE] = "invalid_xor_base"
+            else:
+                return self.async_create_entry(
+                    title=_device_title(self._pending_address),
+                    data={
+                        CONF_ADDRESS: self._pending_address,
+                        CONF_BRIDGE_ACTION: self._pending_bridge,
+                        CONF_XOR_BASE: xor_base,
+                    },
+                )
+
+        return self.async_show_form(
+            step_id="protocol",
+            data_schema=vol.Schema({vol.Required(CONF_XOR_BASE): str}),
+            errors=errors,
+            description_placeholders={"address": self._pending_address},
+        )
+
 
 class MideaFanLightOptionsFlow(OptionsFlowWithReload):
     """Configure the temperature-driven automatic fan mode."""
@@ -192,13 +247,22 @@ class MideaFanLightOptionsFlow(OptionsFlowWithReload):
         )
         if user_input is not None:
             thresholds = tuple(float(user_input[key]) for key in threshold_keys)
+            try:
+                user_input[CONF_XOR_BASE] = format_xor_base(
+                    user_input[CONF_XOR_BASE]
+                )
+            except MideaProtocolError:
+                errors[CONF_XOR_BASE] = "invalid_xor_base"
             if any(left >= right for left, right in zip(thresholds, thresholds[1:])):
                 errors["base"] = "thresholds_not_ascending"
-            else:
+            elif not errors:
                 return self.async_create_entry(data=user_input)
 
         options = self.config_entry.options
-        form_values = user_input or options
+        form_values = user_input or {
+            **self.config_entry.data,
+            **options,
+        }
         temperature_default = form_values.get(CONF_TEMPERATURE_ENTITY)
         temperature_marker: vol.Marker
         if temperature_default:
@@ -218,6 +282,10 @@ class MideaFanLightOptionsFlow(OptionsFlowWithReload):
             )
         )
         schema: dict[vol.Marker, Any] = {
+            vol.Required(
+                CONF_XOR_BASE,
+                default=form_values[CONF_XOR_BASE],
+            ): str,
             temperature_marker: EntitySelector(
                 EntitySelectorConfig(
                     domain=Platform.SENSOR,

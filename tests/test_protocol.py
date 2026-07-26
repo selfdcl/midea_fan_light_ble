@@ -18,13 +18,16 @@ from protocol import (  # noqa: E402
     build_broadcast_release_frame,
     build_control_frame,
     embedded_address,
+    format_xor_base,
     format_timer_minutes,
+    normalize_xor_base,
     parse_advertisement,
     parse_bbb1,
     percentage_to_speed,
     speed_to_percentage,
     temperature_to_speed,
     timer_minutes_to_hour_slot,
+    xor_base_for_address,
 )
 
 
@@ -142,6 +145,91 @@ class ProtocolTests(unittest.TestCase):
                 "46 44 31 D1 F3 51 D3 71"
             ),
         )
+
+    def test_known_device_xor_bases(self) -> None:
+        """Captured devices resolve to their own protocol key."""
+        self.assertEqual(
+            format_xor_base(xor_base_for_address("80:22:00:A0:2F:DA")),
+            "DAFC5ACF2F51AFA0C2202280A24B097A",
+        )
+        self.assertEqual(
+            format_xor_base(xor_base_for_address("80-22-00-91-78-26")),
+            "2648A609789AF891B3112280A2D19EB7",
+        )
+        self.assertIsNone(xor_base_for_address("AA:BB:CC:DD:EE:FF"))
+
+    def test_normalize_xor_base(self) -> None:
+        """Configuration accepts readable separators and stores 16 bytes."""
+        expected = bytes.fromhex("DA FC 5A CF 2F 51 AF A0 C2 20 22 80 A2 4B 09 7A")
+        self.assertEqual(
+            normalize_xor_base("DA:FC:5A:CF:2F:51:AF:A0:C2:20:22:80:A2:4B:09:7A"),
+            expected,
+        )
+        with self.assertRaises(MideaProtocolError):
+            normalize_xor_base("DAFC")
+        with self.assertRaises(MideaProtocolError):
+            normalize_xor_base("Z" * 32)
+
+    def test_build_a02fda_captured_light_toggle(self) -> None:
+        """The DA key reproduces the real app's captured command frame."""
+        xor_base = xor_base_for_address("80:22:00:A0:2F:DA")
+        self.assertEqual(
+            build_broadcast_frame(
+                "80:22:00:A0:2F:DA",
+                0x06,
+                0x0D,
+                xor_base=xor_base,
+            ),
+            from_hex(
+                "11 4D 19 1D DA 2F A0 00 22 80 01 81 A2 4D 09 7A DA "
+                "FC 5A CF 2F 51 AF A0 C2 28"
+            ),
+        )
+
+    def test_build_a02fda_captured_release(self) -> None:
+        """The DA key reproduces the real app's captured release frame."""
+        xor_base = xor_base_for_address("80:22:00:A0:2F:DA")
+        self.assertEqual(
+            build_broadcast_release_frame(
+                "80:22:00:A0:2F:DA",
+                0x01,
+                xor_base=xor_base,
+            ),
+            from_hex(
+                "11 4D 19 11 DA 2F A0 00 22 80 01 7B DA FC 5A CF 2F "
+                "51 AF A0 C2 20 22 80 A2 49"
+            ),
+        )
+
+    def test_build_other_captured_device_frames(self) -> None:
+        """All captured per-device keys reproduce original-app frames."""
+        fixtures = (
+            (
+                "80:22:00:40:83:19",
+                0xFE,
+                0x00,
+                "11 4D 19 10 19 83 40 00 22 80 01 9D 59 E7 3B 99 C3 "
+                "83 A5 03 40 62 C0 22 80 A2",
+            ),
+            (
+                "80:22:00:91:78:26",
+                0x09,
+                0x0A,
+                "11 4D 19 1A 26 78 91 00 22 80 01 B2 11 2B 80 A2 D1 "
+                "9E B7 26 48 A6 09 78 9A F3",
+            ),
+        )
+        for address, command, sequence, expected in fixtures:
+            with self.subTest(address=address):
+                self.assertEqual(
+                    build_broadcast_frame(
+                        address,
+                        command,
+                        sequence,
+                        xor_base=xor_base_for_address(address),
+                    ),
+                    from_hex(expected),
+                )
 
     def test_six_speed_percentage_round_trip(self) -> None:
         """Every advertised percentage must map back to its original level."""

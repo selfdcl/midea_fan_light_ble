@@ -18,13 +18,30 @@ from .const import (
     CONF_AUTO_TEMP_6,
     CONF_BRIDGE_ACTION,
     CONF_TEMPERATURE_ENTITY,
+    CONF_XOR_BASE,
     DEFAULT_AUTO_THRESHOLDS,
     DOMAIN,
     PLATFORMS,
 )
 from .coordinator import MideaFanLightCoordinator
+from .protocol import DEFAULT_XOR_BASE, format_xor_base, xor_base_for_address
 
 MideaFanLightConfigEntry = ConfigEntry[MideaFanLightCoordinator]
+
+
+async def async_migrate_entry(
+    hass: HomeAssistant, entry: MideaFanLightConfigEntry
+) -> bool:
+    """Add the device-specific protocol key to entries created before v3."""
+    if entry.version >= 3:
+        return True
+
+    data = dict(entry.data)
+    address = data[CONF_ADDRESS]
+    base = xor_base_for_address(address) or DEFAULT_XOR_BASE
+    data[CONF_XOR_BASE] = format_xor_base(base)
+    hass.config_entries.async_update_entry(entry, data=data, version=3)
+    return True
 
 
 async def async_setup_entry(
@@ -56,11 +73,15 @@ async def async_setup_entry(
         float(entry.options.get(key, default))
         for key, default in zip(threshold_keys, DEFAULT_AUTO_THRESHOLDS)
     )
+    xor_base = entry.options.get(CONF_XOR_BASE, entry.data.get(CONF_XOR_BASE))
+    if xor_base is None:
+        xor_base = format_xor_base(xor_base_for_address(address) or DEFAULT_XOR_BASE)
     coordinator = MideaFanLightCoordinator(
         hass,
         address,
         entry.title,
         bridge_action,
+        xor_base,
         entry.options.get(CONF_TEMPERATURE_ENTITY),
         auto_thresholds,
     )
